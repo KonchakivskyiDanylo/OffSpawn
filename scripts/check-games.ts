@@ -26,6 +26,7 @@ import { TERMS, termsIn, type TermId } from '@/games/shared/glossary';
 import { DEFAULT_POOL, RANDOM_MIX } from '@/games/shared/pool';
 import { pickFresh, type PuzzleStatus } from '@/games/shared/progress';
 import { GAMES, getGame, VISIBLE_GAMES } from '@/games/registry';
+import { MOVED_SLUGS } from '@/games/moved';
 import {
   buildCriteria,
   hasNestedPair,
@@ -54,6 +55,7 @@ import * as tenaball from '@/games/tenaball/engine';
 import { buildCriteria as buildListCriteria, buildPoolCriteria } from '@/games/list/criteria';
 import { poolBoards } from '@/games/tenaball/pool-boards';
 import { derivedBoards } from '@/games/tenaball/derived-boards';
+import { globalsBoards, globalsEvents } from '@/games/tenaball/globals-boards';
 import { socialBoards } from '@/games/tenaball/social-boards';
 import * as griefer from '@/games/impostor/engine';
 import * as ttt from '@/games/tic-tac-toe/engine';
@@ -118,7 +120,16 @@ async function optional<T>(load: () => Promise<T>, what: string): Promise<T | nu
 for (const game of GAMES) {
   check(getGame(game.slug) === game, `registry: getGame('${game.slug}') did not find ${game.title}`);
   check(getGame(game.id) === game, `registry: getGame('${game.id}') did not find ${game.title}`);
+  // A renamed game's old address (its id) redirects to the new one, and no current address ever does.
+  if (game.id !== game.slug) {
+    check(MOVED_SLUGS[game.id] === game.slug, `registry: /game/${game.id} does not redirect to /game/${game.slug}`);
+  }
+  check(!(game.slug in MOVED_SLUGS), `registry: /game/${game.slug} is current but listed as moved`);
 }
+check(
+  Object.entries(MOVED_SLUGS).every(([from, to]) => getGame(from)?.slug === to),
+  'registry: a moved address points somewhere that is not that game',
+);
 // Every game records its rounds under an id the analytics know, and every id has a game.
 check(
   GAMES.length === GAME_IDS.length && GAME_IDS.every((id) => GAMES.some((game) => game.id === id)),
@@ -618,9 +629,11 @@ if (teammates && facts) {
 
 // ---------------------------------------------------------------- 6. Tenaball
 if (rankings) {
-  notes.push(`tenaball: ${rankings.boards.length} boards`);
+  // The Globals boards are built in the browser from career_path.json, and play like any shipped board.
+  const globals = majors ? globalsBoards(majors, roster) : [];
+  notes.push(`tenaball: ${rankings.boards.length} boards, ${globals.length} Globals boards`);
   const byGroup = new Map<string, number>();
-  for (const board of rankings.boards) {
+  for (const board of [...rankings.boards, ...globals]) {
     byGroup.set(board.group, (byGroup.get(board.group) ?? 0) + 1);
     check(board.rows.length === tenaball.SLOTS, `tenaball: ${board.id} has ${board.rows.length} rows`);
     check(Boolean(board.next?.key), `tenaball: ${board.id} has no 11th place for the tie rule`);
@@ -679,10 +692,11 @@ if (rankings) {
         `tenaball: ${board.id}'s 10th after its level 11th read ${other.outcome.kind}`,
       );
     } else {
-      // The 11th must be a free near miss, not a mistake.
+      // The 11th is wrong and costs a life (13 Oct 2026); the game only says it was 11th.
       const near = tenaball.applyGuess(tenaball.createGame(board, 'hard'), spare[0], board.next.label);
-      check(near.outcome.kind === 'tied', `tenaball: ${board.id} punished its own 11th place`);
-      check(near.state.lives === tenaball.HARD_LIVES, `tenaball: ${board.id} charged a life for the 11th`);
+      check(near.outcome.kind === 'eleventh', `tenaball: ${board.id} did not call out its own 11th place`);
+      check(near.state.lives === tenaball.HARD_LIVES - 1, `tenaball: ${board.id} did not charge a life for the 11th`);
+      check(near.state.wrong.length === 1, `tenaball: ${board.id} did not count the 11th as a wrong answer`);
     }
   }
 
@@ -762,6 +776,49 @@ if (rankings) {
     check(fpe.length > 0, 'tenaball: no Performance Evaluation boards');
     notes.push(`tenaball: ${divcups.length} Div Cup boards, ${fpe.length} Performance Evaluation boards`);
   }
+
+  // The Globals boards, each row worked out again from the raw finishes.
+  if (!majors) {
+    skipped.push('tenaball: the Globals boards (no career_path.json)');
+  } else {
+    const events = globalsEvents(majors);
+    check(events.length >= 4, `tenaball: only ${events.length} Globals with results`);
+    check(!events.some((event) => /World Cup/.test(event.name)), 'tenaball: the World Cup is counted as a Globals');
+    const missedAt: Record<string, number> = { Duo: 100, Trio: 66 };
+    const finishOf = (id: string) =>
+      new Map(majors.resultsFor(id).filter((r) => events.includes(r.tournament)).map((r) => [r.tournament.name, r.placement]));
+    // Every minimum gets its board unless it is the same ten as one already made
+    // (today "played all four" is the best-at-every-Globals board, row for row).
+    const ids = ['globals:best', ...events.slice(0, -1).map((_, i) => `globals:average:${i + 1}`), 'globals:worst'];
+    check(ids.every((id) => globals.some((b) => b.id === id)), `tenaball: Globals boards built: ${globals.map((b) => b.id).join(', ') || 'none'}`);
+    const tens = globals.map((b) => b.rows.map((row) => row.key).join(','));
+    check(new Set(tens).size === tens.length, 'tenaball: two Globals boards have the same ten');
+    for (const board of globals) {
+      check(termsIn(`${board.group} ${board.title}`, board.id).includes('global'), `tenaball: ${board.id} does not explain the Globals`);
+      const all = [...board.rows, board.next];
+      const worst = board.id === 'globals:worst';
+      check(board.lowerIsBetter === !worst, `tenaball: ${board.id} sorts the wrong way`);
+      all.forEach((row, index) => {
+        const mine = finishOf(row.key);
+        const places = [...mine.values()];
+        const expected =
+          board.id === 'globals:best'
+            ? events.reduce((sum, event) => sum + (mine.get(event.name) ?? missedAt[event.mode ?? ''] ?? NaN), 0) / events.length
+            : places.reduce((sum, place) => sum + place, 0) / places.length;
+        check(Math.abs(row.value - expected) < 1e-9, `tenaball: ${board.id} has ${row.label} on ${row.value}, the finishes say ${expected}`);
+        const least = /^globals:average:(\d+)$/.exec(board.id);
+        if (least) check(places.length >= Number(least[1]), `tenaball: ${row.label} is on ${board.id} with ${places.length} Globals`);
+        if (worst) check(places.length >= events.length - 1, `tenaball: ${row.label} is on ${board.id} with ${places.length} of ${events.length} Globals`);
+        if (index > 0) {
+          const before = all[index - 1].value;
+          check(worst ? before >= row.value : before <= row.value, `tenaball: ${board.id} is out of order at ${row.label}`);
+        }
+      });
+    }
+    for (const board of globals) {
+      notes.push(`tenaball ${board.id}: ${board.rows.map((row) => `${row.label} ${row.display}`).join(', ')} | 11th ${board.next.label}`);
+    }
+  }
   for (const [group, count] of [...byGroup].sort((a, b) => b[1] - a[1])) {
     notes.push(`  ${group}: ${count}`);
   }
@@ -775,6 +832,7 @@ if (rankings) {
   const byId = new Map(roster.players.map((p) => [p.id, p]));
   const built = [
     ...derivedBoards(roster.players),
+    ...(majors ? globalsBoards(majors, roster) : []),
     ...pools.pools.flatMap((pool) =>
       poolBoards(pool, pool.players.flatMap((id) => byId.get(id) ?? []), facts, orgs),
     ),
@@ -2296,15 +2354,31 @@ if (pools.pools.length > 0) {
     for (const term of lacks) check(!found.includes(term), `glossary: "${title}" wrongly explains ${term}`);
   };
   expect('Top 10 by LAN wins', 'lan-wins', ['lan-wide'], ['lan']);
-  expect('Players who have won a LAN', 'lan-winners', ['lan'], ['lan-wide']);
+  expect('Players who have won a major LAN', 'lan-winners', ['lan'], ['lan-wide', 'major']);
+  expect('Top 10 by major LAN earnings', 'lan-earnings', ['lan', 'earnings'], ['major']);
   expect('Players from Poland who have won an FNCS', 'country-fncs:Poland', ['nationality', 'fncs-title']);
   expect('FNCS 2026 Globals qualifiers from Europe', 'pool:x:region:Europe', ['region', 'field'], ['nationality']);
   expect('Top 10 by major tournament wins', 'major-wins', ['major']);
   expect('Players with 20+ FNCS grand finals', 'fncs-apps:20', ['fncs-final'], ['fncs-title']);
+  // The 2019 World Cup is not a Globals; the Globals boards explain the Globals.
+  expect('Top 10 by earnings excluding the World Cup', 'earnings-no-wc', ['earnings'], ['global']);
+  expect('Global Championships Top 10 players at the Global Championships', 'globals:best', ['global']);
+  // One event's board says what it is; nothing to explain (13 Oct 2026).
+  for (const [title, id] of [
+    ['Tournaments Top 10 at FNCS 2023 Global Championship', 'tournament:FNCS 2023 Global Championship'],
+    ['FNCS finals — Europe Top 10 at FNCS 2026 - Major 2: Europe', 'tournament:FNCS 2026 - Major 2: Europe - Grand Finals'],
+  ]) {
+    check(termsIn(title, id).length === 0, `glossary: the one-event board "${title}" explains ${termsIn(title, id).join(', ')}`);
+  }
   if (facts) {
     const lans = TERMS.lan.events!(facts).names;
     check(lans.length === facts.events.filter((e) => e.lan).length, 'glossary: the LAN list is not every LAN');
     notes.push(`glossary: ${lans.length} LANs listed — ${lans.join(', ')}`);
+    const globals = TERMS.global.events!(facts).names;
+    check(globals.length >= 4 && globals.every((name) => /Global Championship/.test(name)), `glossary: the Globals list is ${globals.join(', ')}`);
+    // A World Cup win is a major LAN win, never a Globals one.
+    check(facts.of('Bugha').wins.global === 0 && facts.of('Bugha').wins.lan > 0, 'glossary: Bugha’s World Cup still counts as a Globals win');
+    notes.push(`glossary: ${globals.length} Globals listed — ${globals.join(', ')}`);
   }
 }
 
@@ -2457,15 +2531,27 @@ if (socials.platforms.length > 0) {
       check(new Set(secrets).size === secrets.length, `daily ${day}: one player is the secret in two games`);
 
       // Tenaball: rebuilds, and a snapshot taken mid-round comes back the same.
-      const tb = p.tenaball && tenaballDaily.restoreDaily(p.tenaball, rankings, roster, socials, null);
-      check(Boolean(tb) && tb!.lives === tenaball.HARD_LIVES, `daily ${day}: Tenaball did not rebuild on Hard`);
+      const tb = p.tenaball && tenaballDaily.restoreDaily(p.tenaball, rankings, roster, socials, majors, null);
+      check(
+        Boolean(tb) && tb!.difficulty === 'hard' && tb!.lives === tenaball.DAILY_LIVES && tb!.maxLives === tenaball.DAILY_LIVES,
+        `daily ${day}: Tenaball did not rebuild on Hard with ${tenaball.DAILY_LIVES} lives`,
+      );
       if (tb) {
         const first = tenaball.slotsIn(tb)[0].members[0];
         const one = tenaball.applyGuess(tb, first.key, first.label).state;
         const wrong = tenaball.applyGuess(one, '__nobody__', 'Nobody').state;
-        const back = tenaballDaily.restoreDaily(p.tenaball!, rankings, roster, socials, tenaballDaily.snapshot(wrong));
+        const back = tenaballDaily.restoreDaily(p.tenaball!, rankings, roster, socials, majors, tenaballDaily.snapshot(wrong));
         check(back?.lives === wrong.lives && back?.found.size === wrong.found.size && tenaball.namedIn(back, 1).has(first.key), `daily ${day}: a saved Tenaball round did not come back`);
-        check(tenaballDaily.shareGrid(wrong).length === 3, `daily ${day}: Tenaball's share grid is not two rows and the lives`);
+        const grid = tenaballDaily.shareGrid(wrong);
+        check(grid.length === 3, `daily ${day}: Tenaball's share grid is not two rows and the lives`);
+        check([...grid[2]].filter((ch) => ch === '🖤').length === 1, `daily ${day}: Tenaball's share grid does not show one life lost`);
+        // A round saved on the old three lives: still going, it gets the two new
+        // ones; finished, it keeps its hearts out of three.
+        const old = { ...tenaballDaily.snapshot(wrong), lives: 2, maxLives: undefined };
+        const resumed = tenaballDaily.restoreDaily(p.tenaball!, rankings, roster, socials, majors, old);
+        check(resumed?.lives === 4 && resumed.maxLives === tenaball.DAILY_LIVES, `daily ${day}: an old three-life Tenaball round did not get its two new lives`);
+        const ended = tenaballDaily.restoreDaily(p.tenaball!, rankings, roster, socials, majors, { ...old, lives: 0, status: 'lost' });
+        check(ended?.lives === 0 && ended.maxLives === tenaball.HARD_LIVES, `daily ${day}: a finished three-life Tenaball round changed its hearts`);
       }
 
       // List: the list exists and fits the daily's bounds.
@@ -2484,7 +2570,7 @@ if (socials.platforms.length > 0) {
     const listIds = history.map((set) => set.puzzles.list?.list);
     check(new Set(boards).size === DAYS && new Set(listIds).size === DAYS, `daily: a Tenaball board or a List came back within ${DAYS} days`);
     // Neighbouring days look different: no kind twice within KIND_GAP days, no Tenaball family within FAMILY_GAP.
-    const boardById = new Map([...rankings.boards, ...socialBoards(roster, socials)].map((board) => [board.id, board]));
+    const boardById = new Map(tenaballDaily.dailyBoards(rankings, roster, socials, majors).map((board) => [board.id, board]));
     const listById = new Map(lists.map((entry) => [entry.id, entry]));
     const clashes = (ids: (string | undefined)[], key: (id: string) => string | null, gap: number) =>
       ids.flatMap((id, i) =>

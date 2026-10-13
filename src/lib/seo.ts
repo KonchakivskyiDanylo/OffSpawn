@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { GameMeta } from '@/games/registry';
+import { SITE_URL } from './site';
 
 /**
  * What a search engine sees of each page: its title, description and
@@ -11,7 +12,7 @@ import type { GameMeta } from '@/games/registry';
  * the app. Until 1 Oct 2026 every address was a `#/…` hash, which a search
  * engine reads as the home page, and the whole site was one indexed page.
  */
-export const SITE_URL = 'https://offspawn.app';
+export { SITE_URL };
 export const SITE_NAME = 'OffSpawn';
 
 export interface PageMeta {

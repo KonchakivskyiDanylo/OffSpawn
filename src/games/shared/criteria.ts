@@ -176,8 +176,8 @@ export function buildCriteria(
   add(
     'lan-winner',
     'lan-winner',
-    'has won a LAN',
-    'LAN winner',
+    'has won a major LAN',
+    'Major LAN winner',
     (p) => facts.of(p.id).wins.lan > 0,
   );
   add(
@@ -244,8 +244,8 @@ export function buildCriteria(
   add(
     'lan-podium',
     'lan-podium',
-    'has finished top 3 at a LAN',
-    'Top 3 at a LAN',
+    'has finished top 3 at a major LAN',
+    'Top 3 at a major LAN',
     (p) => facts.of(p.id).podium.some((index) => facts.events[index]?.lan),
   );
 

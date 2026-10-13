@@ -165,6 +165,15 @@ function isRegionalFinal(event: RawEvent): boolean {
   return event.kind === 'fncs' && !event.lan;
 }
 
+/**
+ * The 2019 World Cup finals are a major LAN, not a Global Championship (the
+ * user, 13 Oct 2026: "world cup isn't great in this category"). `derived.py`
+ * writes them as `lan` now; a file built before that still says `global`.
+ */
+function readKind(event: RawEvent): EventKind {
+  return event.kind === 'global' && /^Fortnite World Cup/.test(event.name) ? 'lan' : event.kind;
+}
+
 export class Facts {
   readonly generated: string;
   readonly events: HeadlineEvent[];
@@ -184,6 +193,7 @@ export class Facts {
     this.generated = payload.generated;
     this.events = payload.events.map((event, index) => ({
       ...event,
+      kind: readKind(event),
       index,
       year: Number(event.date.slice(0, 4)),
     }));
@@ -193,6 +203,8 @@ export class Facts {
       );
       this.byPlayer.set(player.id, {
         ...player,
+        // Counted from the events as read, so a World Cup win is not a Globals win in an older file either.
+        wins: { ...player.wins, global: player.won.filter((index) => this.events[index]?.kind === 'global').length },
         fncsWinRegions: [
           ...new Set(regional.flatMap((event) => (event.region ? [event.region] : []))),
         ].sort(),

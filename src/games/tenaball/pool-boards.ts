@@ -266,7 +266,7 @@ export function poolBoards(
         board(
           `${prefix}:lans`,
           group,
-          'Top 10 by LAN appearances',
+          'Top 10 by major LAN appearances',
           'player',
           `Epic’s offline majors only — the World Cup, the Globals, the Summit and the other LANs. ${TIE_EARNINGS}`,
           byValue(

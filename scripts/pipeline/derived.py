@@ -119,7 +119,10 @@ def build(BASE):
         return t['name'].startswith('Fortnite World Cup')
 
     def is_global(t):
-        return is_world_cup(t) and 'Finals' in t['name'] or 'Global Championship' in t['name']
+        """The FNCS Global Championships. Not the 2019 World Cup finals, which are
+        a LAN of their own (the user, 13 Oct 2026); facts.ts reads an older
+        file's World Cup as a LAN too."""
+        return 'Global Championship' in t['name']
 
     def year_of(t):
         """Calendar year, or None when the export's date is not one.
@@ -367,14 +370,14 @@ def build(BASE):
 
     board('career-earnings', 'Players', 'Top 10 by career earnings', 'player',
           TIE_MONEY, rank(career, NAME), money)
-    board('lan-earnings', 'Players', 'Top 10 by LAN earnings', 'player',
+    board('lan-earnings', 'Players', 'Top 10 by major LAN earnings', 'player',
           TIE_MONEY, rank(lan_earn, NAME), money)
     board('fncs-earnings', 'Players', 'Top 10 by FNCS earnings', 'player',
           TIE_MONEY, rank(fncs_earn, NAME), money)
     board('earnings-no-wc', 'Players', 'Top 10 by earnings excluding the World Cup',
           'player', TIE_MONEY,
           rank(Counter({k: v - wc_earn[k] for k, v in earn.items()}), NAME), money)
-    board('lan-apps', 'Players', 'Top 10 by LAN appearances', 'player', TIE_COUNT,
+    board('lan-apps', 'Players', 'Top 10 by major LAN appearances', 'player', TIE_COUNT,
           rank_fame(lan_apps, NAME), count('LAN'))
     board('fncs-apps', 'Players', 'Top 10 by FNCS Finals appearances', 'player',
           TIE_COUNT, rank_fame(fncs_apps, NAME), count('final'))

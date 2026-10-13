@@ -20,7 +20,7 @@ import { Modal, OptionCard, OptionGrid } from './ui';
 const KINDS: { id: SupportKind; label: string; hint: string }[] = [
   { id: 'wrong-data', label: '📊 Wrong data', hint: 'A result, age, team or number that is not right.' },
   { id: 'bug', label: '🐞 Bug', hint: 'Something broke or behaved oddly.' },
-  { id: 'category', label: '🔟 New category', hint: 'A Tenaball board, a List, a rule you want to see.' },
+  { id: 'category', label: '🔟 New category', hint: 'A Tenite board, a List, a rule you want to see.' },
   { id: 'suggestion', label: '💡 Suggestion', hint: 'Anything else that would make a game better.' },
 ];
 

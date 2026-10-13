@@ -92,7 +92,7 @@ export function buildCriteria(
   // ---------------------------------------------------------- LAN wins --
   add(
     'lan-winners',
-    'Players who have won a LAN',
+    'Players who have won a major LAN',
     roster.players.filter((player) => facts.of(player.id).wins.lan > 0),
     // This said "any offline tournament in the top two tiers", which is the
     // wider definition one Tenaball board uses. This list is the strict one, so
@@ -343,7 +343,7 @@ export function buildCriteria(
     );
     add(
       `country-lan:${country}`,
-      `Players from ${country} who have played a LAN`,
+      `Players from ${country} who have played a major LAN`,
       players.filter((player) => facts.of(player.id).lanApps > 0),
       'Major LANs only: the World Cup, the Globals and Epic’s other offline finals',
     );
@@ -640,9 +640,9 @@ export function buildPoolCriteria(
   if (lansBefore.length > 0) {
     add(
       `${prefix}:first-lan`,
-      `${pool.label} qualifiers playing their first LAN`,
+      `${pool.label} qualifiers playing their first major LAN`,
       players.filter((player) => lansBefore.every((event) => !facts.playedAt(event.index).has(player.id))),
-      `${field} — at none of the ${lansBefore.length} LANs before it`,
+      `${field} — at none of the ${lansBefore.length} major LANs before it`,
     );
   }
 
@@ -680,7 +680,7 @@ export function buildPoolCriteria(
 
   add(
     `${prefix}:lan`,
-    `${pool.label} qualifiers who have won a LAN`,
+    `${pool.label} qualifiers who have won a major LAN`,
     players.filter((player) => facts.of(player.id).wins.lan > 0),
     `${field} — Epic’s offline majors only: the World Cup, the Globals, the Summit and the other LANs`,
   );

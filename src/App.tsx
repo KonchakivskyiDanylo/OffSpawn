@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Link, Navigate, Route, Routes, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { useOpen } from '@/analytics/client';
 import type { GameId } from '@/analytics/types';
 import { Layout } from '@/components/Layout';
@@ -37,8 +37,12 @@ function GamePage() {
   useOpen(game ? (game.id as GameId) : null, siteDaily && isLiveDaily(game?.id ?? ''));
   // Another day from the archive is a fresh game: nothing typed or picked on one day carries to the next.
   const [params] = useSearchParams();
+  const { search } = useLocation();
 
   if (!game) return <Navigate to="/" replace />;
+  // An old address — the game's id, before a rename — moves to the current one,
+  // `?puzzle=` and all. The server does this with a 301; this covers the dev server.
+  if (slug !== game.slug) return <Navigate to={`/game/${game.slug}${search}`} replace />;
 
   const { Component } = game;
   return (

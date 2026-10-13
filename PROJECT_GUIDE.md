@@ -14,7 +14,7 @@ The site is React, Vite and TypeScript. Every game splits in two: a pure `engine
 | Fortnitedle | Guess a player's handle in six tries, Wordle-style | `wordle` |
 | Career Path | Name the player from ten of their major results | `career-path` |
 | Who Are Ya? | Name the player from the teammates they played with | `who-are-ya` |
-| Tenaball | Name all ten entries on a top-10 board | `tenaball` |
+| Tenite | Name all ten entries on a top-10 board | `tenaball` |
 | List | Name as many answers to a list as you can in 90 seconds | `list` |
 | Griefer | Pick the four to six of ten players who fit a rule | `impostor` |
 | Tic Tac Toe | Fill a 3×3 grid where every cell is a row rule and a column rule | `tic-tac-toe` |
@@ -30,16 +30,16 @@ The site is React, Vite and TypeScript. Every game splits in two: a pure `engine
 | Transfer Window | Name the player from the organisations they have played for | `transfer-window` |
 | Which Lobby? | Name the tournament from its leaderboard, revealed from the bottom up | `which-lobby` |
 
-**Hidden for now: Guess the Player, Connections and Griefer (26 Sep 2026), Pyramid and Bingo (new, 30 Sep 2026), the seven October games (new, 2 Oct 2026 — see their section), and List (4 Oct 2026: too close to Tenaball, back in about a month).** A `hidden` flag in the registry takes a game off the home page and the side nav, and the live site sends its address home. A dev server still opens it by URL, and `check:games` still plays it. Guess the Player needs more than it has. Of the three rule-grid games only one is kept, Tic Tac Toe: every board builds at every level and none repeats over 200 deals. Its Easy level is the thin one, with 30 distinct rules, and "won the EU FNCS" and "$1M+ earner" each sit on 41% of Easy boards. Delete the flag to bring a game back.
+**Hidden for now: Guess the Player, Connections and Griefer (26 Sep 2026), Pyramid and Bingo (new, 30 Sep 2026), the seven October games (new, 2 Oct 2026 — see their section), and List (4 Oct 2026: too close to Tenite, back in about a month).** A `hidden` flag in the registry takes a game off the home page and the side nav, and the live site sends its address home. A dev server still opens it by URL, and `check:games` still plays it. Guess the Player needs more than it has. Of the three rule-grid games only one is kept, Tic Tac Toe: every board builds at every level and none repeats over 200 deals. Its Easy level is the thin one, with 30 distinct rules, and "won the EU FNCS" and "$1M+ earner" each sit on 41% of Easy boards. Delete the flag to bring a game back.
 
-Two folders keep old names: Fortnitedle lives in `wordle` and Griefer in `impostor`. The ids stay unchanged because best scores are stored under them.
+Three folders keep old names: Fortnitedle lives in `wordle`, Griefer in `impostor` and Tenite in `tenaball` (Tenaball until 13 Oct 2026, the user: "it's a football name"). The ids stay unchanged because best scores, daily progress and the daily schedule are stored under them. The old address, which is the id, is a 301 to the new one (`src/games/moved.ts`, read by the server; the app does the same on a dev server), so `/game/tenaball` in shared results still lands on Tenite.
 
 How it runs:
 
 - **Locally:** `npm run dev:all` starts the site on port 5173 and the API on port 3000. The analytics page opens without a password, and rounds you play are recorded to `server/.data` on your machine.
 - **In production:** Heroku, live since the end of September 2026. `npm start` serves the built site and the API from one Node process, stores records in Postgres, and puts `/analytics` behind `ADMIN_PASSWORD`.
 - **No accounts yet.** Best scores, daily progress and streaks live in each browser's local storage.
-- **Daily puzzles on the live site** for Tenaball only; the other live games play unlimited (Fortnitedle since 5 Oct 2026, the rest since 4 Oct). See "Daily puzzles" below.
+- **Daily puzzles on the live site** for Tenite only; the other live games play unlimited (Fortnitedle since 5 Oct 2026, the rest since 4 Oct). See "Daily puzzles" below.
 
 ## The data
 
@@ -50,11 +50,11 @@ Every game reads one Liquipedia export in `liquipedia_data/clean_data/fortnite/`
 | `players.json` | 5,678 playable rows: handle, aliases, nationalities, region, birthday, career and per-year earnings, status, FNCS wins, fame tier | the upstream notebook | the pipeline |
 | `roster.json` | the same players with only the columns the games read and no empty values: 1.3 MB instead of 3.9 MB, 131 KB with brotli (`scripts/pipeline/site.py`, every build). `check:games` proves it gives the same players field for field | `site.py` | every game (falls back to `players.json` if missing) |
 | `tournaments.json`, `placements.json` | 14,645 tournaments and 442,736 placements (154 MB) | the export | the notebook only |
-| `career_path.json` | 187 majors and every player's finishes in them: 1,175 with five or more, 3,348 in all once cell 7 has run | cell 7 | Career Path |
+| `career_path.json` | 187 majors and every player's finishes in them: 1,175 with five or more, 3,348 in all once cell 7 has run | cell 7 | Career Path, Tenite's Globals boards |
 | `teammates.json` | each player's 50 most frequent teammates | cell 6 | Who Are Ya, List |
-| `orgs.json` | 979 organisations, with current and past players | the export | Griefer, Tic Tac Toe, Connections, Tenaball, List |
-| `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, which headline events they played; plus `season`, every team's finish at the year's big events | notebook appendix | the criteria games, List, Tenaball's field boards, FNCS Finals, the glossary |
-| `rankings.json` | 375 precomputed Tenaball boards (284 until cells 2–4 are re-run), plus the tournament names the paydays boards answer from | cells 2–4 | Tenaball |
+| `orgs.json` | 979 organisations, with current and past players | the export | Griefer, Tic Tac Toe, Connections, Tenite, List |
+| `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, which headline events they played; plus `season`, every team's finish at the year's big events | notebook appendix | the criteria games, List, Tenite's field boards, FNCS Finals, the glossary |
+| `rankings.json` | 375 precomputed Tenite boards (284 until cells 2–4 are re-run), plus the tournament names the paydays boards answer from | cells 2–4 | Tenite |
 | `pools.json` | event fields; today one, the FNCS 2026 Globals with 103 players, where each finished and what each had earned before it | cell 5 | event mode |
 | `bios.json` | real names and every organisation stint with its dates, from the transfers | `enrich.py` | IRL, Org Chart, Transfer Window, Rewind (they fall back to `players.json` and `orgs.json` without it) |
 
@@ -71,8 +71,9 @@ Fame is decided upstream. `tier` (easy, medium, hard or unused) and `region_tier
 | Term | Meaning here |
 | --- | --- |
 | Major | An Epic-run main event that Liquipedia rates tier 1, from the 2019 World Cup on. Console, mobile, Twitch and challenge events are excluded, so MrBeast's Extreme Survival Challenge is not a major. 187 events, 178 of them regional FNCS grand finals |
-| LAN | A major played offline: 9 events (the two World Cup finals, the 2022 Invitational, the Globals 2023–26, the 2026 Summit, the Reload Elite Series Championship). The "LAN wins" board alone widens it to any offline tier 1–2 event, so DreamHack, Gamers8 and the Esports World Cup count there |
-| Global Championship | The 2019 World Cup finals and the FNCS Globals 2023–26 |
+| Major LAN | A major played offline: 9 events (the two World Cup finals, the 2022 Invitational, the Globals 2023–26, the 2026 Summit, the Reload Elite Series Championship). Called "major LAN" everywhere a player reads it since 13 Oct 2026 (the user: "give it a name like a major lan") |
+| LAN | Only the "LAN wins" board: any offline tier 1–2 event, so DreamHack, Gamers8 and the Esports World Cup count there |
+| Global Championship | The FNCS Globals 2023–26. Not the 2019 World Cup since 13 Oct 2026 (the user: "world cup isn't great in this category"): it is a major LAN, and a World Cup win is no longer a Global win. `is_global` in `derived.py`; `facts.ts` reads an older `facts.json` the same way |
 | FNCS win | A regional FNCS grand final won, PC only, counted from Liquipedia's results (the 2020 console FNCS is not counted). The Globals, the Invitational and the Summit are not FNCS wins |
 | FNCS finals played | Every FNCS-branded major reached, the Globals, Invitational and Summit included. The 2026 Globals already counts for its qualifiers, because the dump lists entrants before the event |
 | Nationality | The first one on the Liquipedia page. 487 players list two or more. England, Scotland and Wales count as their own nations when listed first |
@@ -96,7 +97,7 @@ Six pieces are shared across the games:
 | --- | --- | --- |
 | Pool setup | Fortnitedle, Career Path, Who Are Ya, Griefer, Connections, Guess the Player | **Random** (the default), or **Choose** by region and fame tier. The choice is remembered across games. The active-or-retired choice is hidden for now; `SHOW_STATUS` in `pool.ts` brings it back |
 | Level setup | Higher or Lower, Tic Tac Toe | One Easy / Medium / Hard that sets both who is asked about and how hard the game presses |
-| Category picker | Tenaball, List | The category is the whole subject, so you pick a board or a list |
+| Category picker | Tenite, List | The category is the whole subject, so you pick a board or a list |
 
 Fame tiers come from `players.json`:
 
@@ -123,7 +124,7 @@ Fortnitedle, Career Path, Who Are Ya and Guess the Player deal their secret play
 On the home page you can swap the whole scene for one tournament's field; today that is the FNCS 2026 Globals, 103 players. Every game then draws from that field only, until you leave it from the header.
 
 - **Setup collapses.** The setup screens become a Start button.
-- **Field categories.** Tenaball and List swap to boards and lists built from the field in the browser, under one heading, in a planned order.
+- **Field categories.** Tenite and List swap to boards and lists built from the field in the browser, under one heading, in a planned order.
 - **Regions in turn for the secret-player games.** Taking regions in turn (`dealInTurn`) puts every region on screen every six rounds. Europe sent 46 players and the Middle East 4, so an even draw almost never reached the small regions.
 - **Region lean in Higher or Lower.** The next player leans towards the region the run has shown least: 4.8 regions in the first 12 rounds instead of 3.2.
 - **The whole field, not the roster's minimums.** A qualifier is never left out for falling short of a bar the roster uses. Career Path takes anyone in the field with a major and Who Are Ya anyone with a teammate; either gives a short hand five guesses. Guess the Player takes the players with no birthday, and their Age column goes grey. Griefer, Connections and Tic Tac Toe drop their three-major minimum. At the 2026 Globals every secret-player game deals all 101 (Career Path once cell 7 has run). Only Higher or Lower's Age leaves out the 11 with no birthday, because there is nothing to compare.
@@ -135,17 +136,17 @@ On the home page you can swap the whole scene for one tournament's field; today 
 
 - **Where from:** country and region
 - **Who for:** has played for one of the ten richest organisations
-- **What won:** FNCS winner, 2+ or 3+ FNCS wins, Global, LAN or major winner, won a region's FNCS, won an FNCS in a given year
-- **Tic Tac Toe only** (their own kinds, so Connections' and Griefer's whitelists leave them out): the exact FNCS count (none, exactly 1, 2 or 3, 4+), won the FNCS back to back, top 3 at a LAN (35 players), and won an FNCS with a named player — any Easy-tier player with 3+ FNCS-winning partners can be named (23 of them; Peterbot: Cold, Ritual, Pollo, Bylah)
+- **What won:** FNCS winner, 2+ or 3+ FNCS wins, Global, major LAN or major winner, won a region's FNCS, won an FNCS in a given year
+- **Tic Tac Toe only** (their own kinds, so Connections' and Griefer's whitelists leave them out): the exact FNCS count (none, exactly 1, 2 or 3, 4+), won the FNCS back to back, top 3 at a major LAN (35 players), and won an FNCS with a named player — any Easy-tier player with 3+ FNCS-winning partners can be named (23 of them; Peterbot: Cold, Ritual, Pollo, Bylah)
 - **What earned:** $100K, $250K, $500K or $1M+ career earnings
-- **Where played:** at a named Globals or LAN
+- **Where played:** at a named Globals or major LAN
 - **The rest:** age (under 18, 20+). There is no active or retired rule: Liquipedia rarely marks a player retired, so "Retired" refused players everyone knows have stopped (removed 28 Sep 2026)
 
 No two rules on one board may be nearly the same: if 90% of one fits inside the other, they do not go together (`NEAR_NESTED`). That is what stops "has won a major" (164 of 165 are FNCS winners) sharing a board with "has won an FNCS".
 
 ### Definitions and Give up
 
-- **Definitions.** Every game's "How to play" ends with "What the words mean". Majors, LANs and Globals can list the exact events they cover. Every Tenaball board and List prompt has a "What counts here" fold for the words in its own title.
+- **Definitions.** Every game's "How to play" ends with "What the words mean". Majors, LANs and Globals can list the exact events they cover. Every Tenite board and List prompt has a "What counts here" fold for the words in its own title — except a board about one event (`tournament:…`), whose name says what it is: "Top 10 at FNCS 2023 Global Championship" no longer explains what a Globals is (13 Oct 2026).
 - **Give up.** Every game has a two-step Give up beside its controls: one click arms it, a second reveals the answer.
 
 ## Higher or Lower
@@ -298,25 +299,27 @@ That spread means you are never dealt the ten weakest, and meeting the same play
 
 A plain shuffle dealt the duo partner first one round in ten, which ended a known player's round on clue one. Teammates on the same count can come out in either order; the count is the clue, not the position. After the round the whole list turns face up, dimmed, with the counts.
 
-## Tenaball
+A clue card shows the teammate's name and country, spelled out: no organisation and no country code (13 Oct 2026).
+
+## Tenite
 
 You get one top-10 board and ten empty slots, and name the ten. A correct answer locks into its real position, so the board fills from wherever you know it.
 
 - **Easy:** unlimited guesses.
-- **Hard:** three lives, and every wrong guess costs one.
+- **Hard:** three lives, and every wrong guess costs one. The daily is Hard on five (`DAILY_LIVES`, 13 Oct 2026); a daily begun on three that was still going got the two new ones.
 
 **Typing is forgiving.** Names resolve regardless of case, spaces and accents, and one typo is accepted when the match is unambiguous. The guess box always searches the whole population, never just the ten answers, because a dropdown of the answers would solve the board for you.
 
 ### The boards
 
-901 boards come precomputed from the notebook (`rankings.json`), because they are aggregated from 442,736 placements. Eleven more are built in the browser from the roster.
+901 boards come precomputed from the notebook (`rankings.json`), because they are aggregated from 442,736 placements. Eleven more are built in the browser from the roster, and five from `career_path.json` (the Global Championships, below).
 
 | Group | Boards | Answered with |
 | --- | --- | --- |
 | By country | 76 | players from one country |
 | By region | 59 | players from one region |
 | Teammates | 59 | a player's most frequent teammates |
-| Players | 31 | players: earnings, FNCS wins, LANs, majors and more |
+| Players | 31 | players: earnings, FNCS wins, major LANs, majors and more |
 | Countries | 20 | country names |
 | Paydays | 20 | the tournament where the money was won |
 | Organisations | 11 | organisation names |
@@ -327,7 +330,8 @@ You get one top-10 board and ten empty slots, and name the ten. A correct answer
 | FNCS finals — North America | 44 | an FNCS grand final's top ten placements: every NA final |
 | FNCS finals — Europe | 26 | every EU final |
 | FNCS finals — other regions | 21 | the other regions' 2025 and 2026 finals and the 2021 Grand Royale |
-| Tournaments | 8 | a LAN's top ten placements |
+| Tournaments | 8 | a major LAN's top ten placements |
+| Global Championships | 5 | the Globals across the years (`globals-boards.ts`, built in the browser): the best average finish at every Globals, a missed one at twice a full lobby's last place like the season boards; the best average over the Globals played, one board per minimum from one Globals to all of them (the user: "min4, min3, min2, min1 all of them") — but a board with the same ten as one already made is left out, and today "played all four" is the best board row for row; the worst average among the players at all of them (24 today: EpikWhale, Shadow, Yuma…), or at all but one once fewer than 20 have been to every one. Level averages go to career earnings: "two or more played" has Vanyak3kk, Demus and Darm on 7.5 for 10th |
 
 Seven FNCS finals are left out by the rules below: a finisher the roster cannot name, a shared place in the top eleven, or a player listed twice.
 
@@ -339,7 +343,7 @@ Every board prints its own tie rule above the slots:
 - **Money boards** are straight money order.
 - **Youngest and oldest** go by birth date, not age in years.
 - **Never the alphabet.** If 10th and 11th are still level after the tie rule, either of the two fills 10th (`shareCut`), and naming the other after that says it is level and costs nothing. Today that is Top 10 earners in 2018 — Asia. A 12th level too still drops the board (squad earnings).
-- **Near miss.** Naming someone level with 10th but ranked out by the tie rule is called out and never costs a life.
+- **The 11th is wrong.** Naming the 11th, level with 10th or not, costs a life like any wrong answer; the game only says it was 11th (13 Oct 2026, the user: "top 11 is still wrong" — it used to be a free near miss). Only a shared cut is free: there both are right.
 
 ### Season boards
 
@@ -420,14 +424,14 @@ You get one list and 90 seconds to name as many of it as you can. Every correct 
 | Year by year | 56 | won a major in 2023; played every FNCS grand final of 2024 — Europe (each year by region, the one they played most of the rounds in; 2019's asks for the World Cup too and stays one list, 65) |
 | Div Cups | 94 | winners by region, and duo and trio winners by region; 40+ and 50+ finals, 20+ and 30+ in one region; 5+ and 8+ wins; played every week of a season, by region |
 | Performance Evaluations | 6 | 40+ and 60+ sessions, by region too |
-| The 2026 season | 1 | played all five big events (the top 10s are Tenaball boards) |
+| The 2026 season | 1 | played all five big events (the top 10s are Tenite boards) |
 | Titles and fields | 2 | LAN winners; qualified for a field |
 
 Lists answered with countries or organisations search every name, not just the answers.
 
 - **Age at a win** is on the day of the grand final, from the published birthday; the dates are Liquipedia's regional finals, the same finals the FNCS count is made of.
 
-**Played or not.** Tenaball's and List's pickers mark each board green (completed), yellow (tried: gave up or fell short) or red (not played), from `progress:<game>` in local storage (`games/shared/progress.ts`). Keyed by puzzle id, so a daily puzzle can key by date. The Random buttons pick an unplayed board first, then a tried one, then any (`pickFresh`).
+**Played or not.** Tenite's and List's pickers mark each board green (completed), yellow (tried: gave up or fell short) or red (not played), from `progress:<game>` in local storage (`games/shared/progress.ts`). Keyed by puzzle id, so a daily puzzle can key by date. The Random buttons pick an unplayed board first, then a tried one, then any (`pickFresh`).
 
 ### Event-mode lists
 
@@ -481,7 +485,7 @@ A 3×3 grid has a rule on each row and each column; every cell needs one player 
 
 At every level any player who fits is accepted. The level decides what the board is built around, not who you may type. A name that fits no open cell costs a life, and the last life ends the board. Hard used to say "nine guesses, one per cell", which was one life said the long way round.
 
-**Lives are hearts in every game that has them:** Tic Tac Toe, Tenaball Hard, Connections and Guess the Player (`Hearts` in `components/ui.tsx`). Career Path and Who Are Ya count clues instead, Fortnitedle's rows are its tries, and Higher or Lower and Griefer end on the first mistake.
+**Lives are hearts in every game that has them:** Tic Tac Toe, Tenite Hard, Connections and Guess the Player (`Hearts` in `components/ui.tsx`). Career Path and Who Are Ya count clues instead, Fortnitedle's rows are its tries, and Higher or Lower and Griefer end on the first mistake.
 
 ### How a board is built
 
@@ -550,7 +554,7 @@ Ten players and one category; sort them into a pyramid of 1, 2, 3 and 4, best at
 | Medium | Easy + Medium tiers | top third; 6% apart | 2 lives |
 | Hard | everyone | top half; 3% apart | 1 life |
 
-- **Categories:** FNCS grand finals played, FNCS wins, career earnings, earnings in a year, LAN appearances, and ten finishers at one tournament (the events of Tenaball's tournament boards: the LANs on Easy, plus EU/NA finals since 2024 on Medium, every final on Hard; on a duos event each item is the team). The ten are drawn at random from the event's results in `career_path.json` (the user, 1 Oct 2026: not always the top ten): from the top 20 on Easy, the top 30 on Medium, anywhere on Hard, and only places whose whole team is on the roster. Without that file, the top ten. Each kind is equally likely.
+- **Categories:** FNCS grand finals played, FNCS wins, career earnings, earnings in a year, LAN appearances, and ten finishers at one tournament (the events of Tenite's tournament boards: the LANs on Easy, plus EU/NA finals since 2024 on Medium, every final on Hard; on a duos event each item is the team). The ten are drawn at random from the event's results in `career_path.json` (the user, 1 Oct 2026: not always the top ten): from the top 20 on Easy, the top 30 on Medium, anywhere on Hard, and only places whose whole team is on the roster. Without that file, the top ten. Each kind is equally likely.
 - **Close but orderable:** money walks down the ranking taking the next player at least the level's gap below the last. Counts take one player per distinct value; FNCS wins and LANs have fewer than ten values, so up to three pairs share a value.
 - **Ties:** players level on a value are right either way round.
 - **Left out:** LAN wins — fifteen players have one, nearly all exactly one.
@@ -700,7 +704,7 @@ Opens and starts go to `POST /api/funnel` and are kept in the `funnel` table as 
 | Page | Shows |
 | --- | --- |
 | `/analytics` | five tiles (visits, game opens, rounds started, rounds finished, won) each against the period before with a sparkline; traffic per day as lines; conversion (opens that started a round, rounds finished, rounds won); where visits land; a games table with each game's funnel and how its rounds ended; page opens by weekday and hour (Berlin time); how rounds were set up |
-| `/analytics/game/<id>` | one game: the same tiles, traffic and conversion narrowed to it, its daily and unlimited halves side by side, how its rounds ended, then its own tables with a search box. Examples: which clue solved a Career Path, which Tenaball answers nobody finds, which Griefer cards get misread, which Tic Tac Toe cells stay empty, which Higher or Lower pairs trip people up |
+| `/analytics/game/<id>` | one game: the same tiles, traffic and conversion narrowed to it, its daily and unlimited halves side by side, how its rounds ended, then its own tables with a search box. Examples: which clue solved a Career Path, which Tenite answers nobody finds, which Griefer cards get misread, which Tic Tac Toe cells stay empty, which Higher or Lower pairs trip people up |
 | `/analytics/players` | a search over every player the rounds mention |
 | `/analytics/players/<id>` | one player across every game: what they were (the secret, a card, an answer, a tile…), how often, how often people got them right, and their latest appearances |
 | `/analytics/support`, `/errors` | the inbox, with status tabs and a search, and the error table |
@@ -714,7 +718,7 @@ Opens and starts go to `POST /api/funnel` and are kept in the `funnel` table as 
 | Random | the shared picker on Random | — |
 | Chosen | the picker on Choose | region, difficulty |
 | Event mode | an event field was in force | which field |
-| Own setup | Higher or Lower, Tic Tac Toe, Tenaball and List | level, mode, category |
+| Own setup | Higher or Lower, Tic Tac Toe, Tenite and List | level, mode, category |
 
 **Filters.** A bar above every page narrows everything at once. Its choices are the range (24 hours, 7, 30 or 90 days, all time), where the players came from, the event, the region, the difficulty, the level and the outcome. The filters live in the address, so they hold across pages and a view can be bookmarked. The dropdowns only offer values some stored round has. Tables sort by any column.
 
@@ -733,7 +737,7 @@ Locally, `npm run dev:all` sets `ADMIN_OPEN=1` for the API and `VITE_RECORD=1` f
 
 **Load speed.** The build writes a brotli and a gzip copy of every text file (`precompress` in `vite.config.ts`) and the server sends the brotli one to browsers that take it — about a third smaller than gzip. The home page fetches the players while you choose a game (`usePrefetchRoster` in `pages/Home.tsx`).
 
-**Search engines.** Since 1 Oct 2026 every page has a real address — `/game/tenaball`, `/credits`, `/analytics` — instead of a `#/` hash, which a search engine reads as the home page. Old hash links are rewritten on load (`src/main.tsx`). After `vite build`, `scripts/prerender.ts` writes `dist/game/<slug>/index.html` for every game the site shows, plus the home and credits pages: each with its own title, description, canonical link and share tags (`src/lib/seo.ts`, the `seo` field in the registry), and the game's pitch and rules as plain HTML that the app replaces on its first render. It also writes `dist/sitemap.xml`; `public/robots.txt` keeps crawlers off `/analytics` and `/api/`. The server answers any other path with the home page and a 404, so a stray address is never indexed as a copy of the home page. Hidden games get no page until they are unhidden.
+**Search engines.** Since 1 Oct 2026 every page has a real address — `/game/tenaball`, `/credits`, `/analytics` — instead of a `#/` hash, which a search engine reads as the home page. Old hash links are rewritten on load (`src/main.tsx`). After `vite build`, `scripts/prerender.ts` writes `dist/game/<slug>/index.html` for every game the site shows, plus the home and credits pages: each with its own title, description, canonical link and share tags (`src/lib/seo.ts`, the `seo` field in the registry), and the game's pitch and rules as plain HTML that the app replaces on its first render. It also writes `dist/sitemap.xml`; `public/robots.txt` keeps crawlers off `/analytics` and `/api/`. The server answers any other path with the home page and a 404, so a stray address is never indexed as a copy of the home page. Hidden games get no page until they are unhidden. **One address** (13 Oct 2026): Search Console had crawled `http://` and `www.` copies of every page and listed them as "Alternative page with proper canonical tag". The server now answers a page on `www.offspawn.app`, or on `http://offspawn.app` (Heroku's `x-forwarded-proto`), with a 301 to `https://offspawn.app` and the same path (`canonicalTarget` in `server/index.ts`; the address is `src/lib/site.ts`). API calls and the herokuapp.com address are left alone. Those copies then show in Search Console as "Page with redirect", which is the expected end state, not an error.
 
 Three commands must pass before anything ships: `npm run typecheck`, `npm run check:games` and `npm run check:server`. `npm run build` runs the typecheck again and then builds the site. GitHub Actions runs all of them, the build, `scripts/check_liquipedia_api.py` and `scripts/check_socials_api.py` on every push (`.github/workflows/checks.yml`); Heroku waits for it only with "Wait for CI to pass before deploy" ticked.
 
@@ -757,12 +761,12 @@ It plays every game with a perfect player, generating the random games many time
   - Round one is top 20 against top 20, and the cap is never left.
   - No tie without an Equal button, and no obvious pair once the schedule reaches close.
   - Under 75% of answers flip direction, and on Hard a shown 0 must not always go up.
-- **Tenaball:** every board has ten answers you can type, and a tie at 10th is never settled by name.
+- **Tenite:** every board has ten answers you can type, and a tie at 10th is never settled by name.
 - **List:** every list has enough answers, none repeated, all typable. Lists answered with countries or organisations search more than their answers.
 - **Tic Tac Toe:** 25 boards per level, every one fillable with nine different players, and a Hard board ends on its first wrong answer.
 - **Connections:** 40 boards on a tier and 20 on Random. Each splits exactly one way, no rule covers a fifth player, and no two rules are nearly the same.
 - **Event mode:**
-  - The field's Tenaball boards come in the planned order, and the planned lists exist.
+  - The field's Tenite boards come in the planned order, and the planned lists exist.
   - Every six deals of the secret-player games cover all six regions.
   - Higher or Lower's region lean shows more regions than without it.
 - **Definitions:** the matcher explains the right terms for tricky titles, and the LAN list names every LAN.
@@ -779,12 +783,12 @@ A generated data file that is missing makes its games report SKIPPED and the sui
 
 From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** — before that day it plays as it always did, with a line on the home page saying when the dailies start, and it switches by itself at midnight in Berlin: one puzzle per game per day, the same for everyone. The setup screens — the pool picker, levels, modes, the board and list pickers — are still there on a dev server, behind a **🛠 Practice** button in each game's toolbar (`usePlayMode` in `src/daily/useDailyRound.ts`).
 
-**Which games are a daily** is `LIVE_DAILY` in `src/daily/types.ts`: Tenaball only. Six games have a daily built (`DAILY_GAMES`); on 4 Oct 2026 the user moved Career Path, Who Are Ya? and Tic Tac Toe to unlimited "for now" and hid List, and on 5 Oct moved Fortnitedle to unlimited too. A built daily not in `LIVE_DAILY` keeps its code and its checks, but no puzzle is made for it, its page plays unlimited with the setup screens everywhere (no chip, no 🛠 toggle), and the home page lists it under **Unlimited** with Higher or Lower. To make one a daily again, add it to `LIVE_DAILY`; days the editor already made ahead have no puzzle for it, so draw them with **↻ New**.
+**Which games are a daily** is `LIVE_DAILY` in `src/daily/types.ts`: Tenite only. Six games have a daily built (`DAILY_GAMES`); on 4 Oct 2026 the user moved Career Path, Who Are Ya? and Tic Tac Toe to unlimited "for now" and hid List, and on 5 Oct moved Fortnitedle to unlimited too. A built daily not in `LIVE_DAILY` keeps its code and its checks, but no puzzle is made for it, its page plays unlimited with the setup screens everywhere (no chip, no 🛠 toggle), and the home page lists it under **Unlimited** with Higher or Lower. To make one a daily again, add it to `LIVE_DAILY`; days the editor already made ahead have no puzzle for it, so draw them with **↻ New**.
 
 | Piece | Where | What it does |
 | --- | --- | --- |
 | The day | `src/daily/day.ts` | A day is its date in `Europe/Berlin`, so the reset is midnight Central European time through summer time too. `DAILY_START` (5 Oct 2026) is puzzle #1; a day before it shows as "preview". `?day=YYYY-MM-DD` pretends it is another day, on a dev server only |
-| The puzzles | `src/daily/generate.ts`, `src/games/<game>/daily.ts` | A day's set is one small descriptor per game: a secret player and the clues in order, a Tenaball board id, a List id, Tic Tac Toe's six rule ids. Each game's `daily.ts` picks one (`pickDaily`) and rebuilds a round from one (`restoreDaily`) |
+| The puzzles | `src/daily/generate.ts`, `src/games/<game>/daily.ts` | A day's set is one small descriptor per game: a secret player and the clues in order, a Tenite board id, a List id, Tic Tac Toe's six rule ids. Each game's `daily.ts` picks one (`pickDaily`) and rebuilds a round from one (`restoreDaily`) |
 | Kept once made | `server/index.ts` `GET /api/daily/<day>`, table `daily_puzzles` | The first request for a day makes its set and the store keeps it; every later request reads the kept one. A deploy or a data update mid-day cannot change a puzzle people have played. Never a day after today on the live site |
 | Your progress | `src/daily/progress.ts`, `useDailyRound.ts` | The round in progress is saved on every move (`daily:<game>`, earlier days in `daily-past:<game>`), so a reload carries on; every finished day goes in `daily-log:<game>`. Browser only — no accounts yet |
 | The end | `src/components/DailyEnd.tsx` | Score, a Wordle-style emoji grid, **Share** (the phone's share sheet, or the clipboard), played / won / streak / best, and the countdown |
@@ -796,19 +800,19 @@ From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** 
 | Fortnitedle | a well-known name; from guess 3, told the name has a digit, as in every round | `4/6`, Wordle's rows |
 | Career Path | a well-known player, clues oldest first | `3/10`, one square per clue: 🟥 guessed wrong, ⬛ skipped, 🟩 named, ⬜ not needed |
 | Who Are Ya | a well-known player, counts shown, weakest teammate first | the same as Career Path |
-| Tenaball | a board of a known kind (players, seasons, FNCS, places, teammates, events, orgs and countries, Div Cups all time), six of its ten rows well known; 3 lives | `7/10`, the ten slots and the hearts left |
+| Tenite | a board of a known kind (players, seasons, FNCS, places, teammates, events, orgs and countries, Div Cups all time, the Globals), six of its ten rows well known; 5 lives | `7/10`, the ten slots and the hearts left |
 | List | a list of 10–60 with four famous names and 40% well known; wrong answers cost 3 seconds | `14/37`, ten blocks for the share found |
 | Tic Tac Toe | a Medium grid; the last week's rules left out | `9/9`, the grid and the hearts left |
 
 **Well known** (`src/daily/fame.ts`) is the Easy band plus the 250 best-earning players of the Medium band. The whole Medium band reaches into every region's own scene, which made "Top 10 duos of 2024 — Asia" a daily. The three secret players of a day are three different people, 60% from the Easy band, and none comes back while anyone unplayed is left (`SECRET_REST`).
 
-**Boards and lists come back only when they change** (`src/daily/reuse.ts`). Each Tenaball and List daily keeps a fingerprint of who its answers are (`sig`). A board is never a daily again while its top 10 is the same people; once a big event changes it ("Top 10 by career earnings" after a World Cup), it is a new puzzle and may come back, but not within 30 days (`CHANGED_REST`). Neighbouring days are kept apart too: no kind of board or list twice within 2 days (`KIND_GAP`), and no family — one board split by region or year, like "average FNCS finish — NA East" and "— NA West" — within 7 (`FAMILY_GAP`). Boards that count only players Liquipedia lists as active are never a daily, since its retired status is rarely updated.
+**Boards and lists come back only when they change** (`src/daily/reuse.ts`). Each Tenite and List daily keeps a fingerprint of who its answers are (`sig`). A board is never a daily again while its top 10 is the same people; once a big event changes it ("Top 10 by career earnings" after a World Cup), it is a new puzzle and may come back, but not within 30 days (`CHANGED_REST`). Neighbouring days are kept apart too: no kind of board or list twice within 2 days (`KIND_GAP`), and no family — one board split by region or year, like "average FNCS finish — NA East" and "— NA West" — within 7 (`FAMILY_GAP`). Boards that count only players Liquipedia lists as active are never a daily, since its retired status is rarely updated.
 
 **A streak** is days in a row with that game's daily played, win or lose — a hard day does not break a month. Every streak is per game, on the home page too: each daily's card shows its own 🔥 (4 Oct 2026, the user: "if player played fortnitedle today, it will show on fortnitedle 1 day streak but not for other games"). A day caught up from the archive counts as played and in Won, but not towards a streak or best run (`late` in the log).
 
 **Earlier puzzles** (the archive, 8 Oct 2026 — the user: "play previous days games, only if from this website nobody played before"). Every daily from #1 to yesterday can be played, **once per browser**:
 
-- **Where.** `/game/<slug>?puzzle=N` (`usePuzzleDay` in `src/daily/useDay.ts`; anything outside #1 to yesterday is today's). Reached from **📅 Earlier puzzles** on the home page, **📅 Earlier** beside a daily game's title, and the missed days under a finished puzzle (`src/components/PastPuzzles.tsx`). The page says which day it is, that it will not count towards the streak, and links back to today's.
+- **Where.** `/game/<slug>?puzzle=N` (`usePuzzleDay` in `src/daily/useDay.ts`; anything outside #1 to yesterday is today's). Reached from **📅 Earlier** beside a daily game's title and the missed days under a finished puzzle (`src/components/PastPuzzles.tsx`) — inside the games only: the home page lost its button on 13 Oct 2026, and its strip reads "Today's puzzles" with no number, since each game may count its days from a different start. The page says which day it is, that it will not count towards the streak, and links back to today's.
 - **Once.** A finished day opens to its board and result, never a new round. A day begun and left carries on where it was. A day finished before its board was kept (anything played before 8 Oct 2026) shows "You have played puzzle #N already" and its score (`played` in `useDailyRound`).
 - **Kept.** `daily:<game>` holds the latest day's round; when a later day starts, the earlier one moves to `daily-past:<game>`, where archive rounds are saved too. The newest 60 finished ones are kept for their boards; unfinished ones always stay. Browser only, like the rest.
 - **The server** already hands out any day up to today, so nothing changed there. The day's set is the one kept, so an archive puzzle is the one everybody had that day.
@@ -832,7 +836,7 @@ YouTube subscribers and Twitch followers, in ten games since 3 October 2026. Bot
 | Game | What uses them |
 | --- | --- |
 | Higher or Lower | Twitch Followers and YouTube Subscribers categories; the fame window ranks by the count itself, so a run opens on the big channels |
-| Tenaball | "Followers" boards per platform: everyone, each region, FNCS champions, under 20. Built in the browser; a level count goes to the bigger career earner. The daily may be the world, Europe, North America or the champions board |
+| Tenite | "Followers" boards per platform: everyone, each region, FNCS champions, under 20. Built in the browser; a level count goes to the bigger career earner. The daily may be the world, Europe, North America or the champions board |
 | List | Everyone over 1M / 2M / 5M, and each region over the highest line that makes a round |
 | Tic Tac Toe, Connections, Griefer, Bingo | rules "100K+ / 1M+ Twitch / YouTube"; Griefer's near misses are a quarter of the line or more |
 | Guess the Player | a Twitch column with arrows |
@@ -847,7 +851,7 @@ Limited mode is planned, not built. It is a fortnight around one event when the 
 
 | Game | Daily plan | Works today in event mode |
 | --- | --- | --- |
-| Tenaball | categories 1–10 before the event, appearances on day one, results boards from 27 Sep | the 11 pre-event boards |
+| Tenite | categories 1–10 before the event, appearances on day one, results boards from 27 Sep | the 11 pre-event boards |
 | List | the same shape: field lists first, results lists after | 12 of 18 lists |
 | Fortnitedle, Career Path, Who Are Ya, Guess the Player | one secret player a day each, nobody twice across all four (72 of 101); days 1–12 by region, 13–18 the event's stories | regions in turn |
 | Higher or Lower | a 20-player run a day, rotating Age, FNCS Wins, FNCS Finals, Earnings; each category splits the field into its own five pools | region lean, difficulty rising |
@@ -875,7 +879,7 @@ My recommendation: commit this week's work and get the site live before the Glob
 | --- | --- | --- | --- |
 | 1 | Commit and push the work of 27 Sep: Higher or Lower Placement, the new List and Tic Tac Toe categories, the data pipeline and the webhook | none of it is in git yet | small |
 | 2 | Deploy to Heroku: check a clean clone builds, then create the app, Postgres and `ADMIN_PASSWORD` | the dashboard only learns from real players | small |
-| 3 | Event results by day: placements by day, points and duos into `pools.json` (final placements are already there, cell 5 of `scripts/pipeline/derived.py`), updated each evening of an event | unlocks Tenaball 13–19 and List 11 and 15 | medium |
+| 3 | Event results by day: placements by day, points and duos into `pools.json` (final placements are already there, cell 5 of `scripts/pipeline/derived.py`), updated each evening of an event | unlocks Tenite 13–19 and List 11 and 15 | medium |
 | 4 | The daily mode: one puzzle per game per day, seeded by date, switched on and off by date | the core of limited mode | large |
 | 5 | Limited-mode dealing: no player twice across the four secret games; five balanced pools per Higher or Lower category | what the plan promises per day | medium |
 

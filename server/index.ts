@@ -18,6 +18,8 @@ import {
 import { addDays, DAILY_START, dayKey, isDayKey, puzzleNumber } from '@/daily/day';
 import { DAILY_GAMES, type DailyGame, type DailySet } from '@/daily/types';
 import { Socials } from '@/data/socials';
+import { movedPath } from '@/games/moved';
+import { SITE_HOST, SITE_URL } from '@/lib/site';
 import { refreshSocials, scheduleSocials, servedSocials, socialsStatus, startTwitchLogin } from './socials';
 import { hourKey, openStore, type PageChange } from './store';
 
@@ -582,13 +584,20 @@ function encodedBody(file: string, encoding: 'br' | 'gzip'): Promise<Buffer | nu
 /**
  * Files from `dist/`, and pages for everything else. The app routes on real
  * paths, and the build writes a page for each one a search engine should know
- * (`scripts/prerender.ts`): `/game/tenaball` is `dist/game/tenaball/index.html`.
+ * (`scripts/prerender.ts`): `/game/tenite` is `dist/game/tenite/index.html`. A
+ * renamed game's old address is a 301 to its new one (`games/moved.ts`): shared
+ * daily results carry `/game/tenaball`.
  * Any other path gets the home page for the app to route — the dashboard at
  * `/analytics` with a 200, anything else with a 404, so a mistyped or retired
  * address is never indexed as a copy of the home page. Hashed assets are
  * cached for a year; pages never, so a deploy is picked up on reload.
  */
 async function serveStatic(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  const moved = movedPath(url.pathname, url.search);
+  if (moved) {
+    res.writeHead(301, { location: moved, 'cache-control': 'public, max-age=86400' }).end();
+    return;
+  }
   const wanted = path.normalize(decodeURIComponent(url.pathname)).replace(/^([/\\])+/, '');
   let file = path.join(DIST, wanted);
   if (!file.startsWith(DIST)) return send(res, 403);
@@ -627,9 +636,38 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse, url: URL):
   res.writeHead(status, { ...headers, 'content-length': String(body.length) }).end(body);
 }
 
+/**
+ * Where a page request belongs when it reached the site by another address.
+ *
+ * The site lives at https://offspawn.app, and every page says so in its
+ * canonical link. But it also answered on http:// and on www., and Google
+ * crawled all four: Search Console listed `http://www.offspawn.app/` and the
+ * rest as "Alternative page with proper canonical tag" (13 Oct 2026). A 301
+ * makes it one address. Pages only — an API call is never redirected, since a
+ * redirected POST arrives as a GET — and only the site's own two aliases: a
+ * local server, the herokuapp.com address and anything else pass through.
+ * `http://` is read from Heroku's `x-forwarded-proto`. A moved game's old
+ * address goes straight to its new one, in one hop.
+ */
+function canonicalTarget(req: IncomingMessage, url: URL): string | null {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return null;
+  if (url.pathname.startsWith('/api/')) return null;
+  const host = String(req.headers.host ?? '').toLowerCase().replace(/:\d+$/, '');
+  const proto = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0].trim().toLowerCase();
+  const www = host === `www.${SITE_HOST}`;
+  const insecure = host === SITE_HOST && proto === 'http';
+  if (!www && !insecure) return null;
+  return SITE_URL + (movedPath(url.pathname, url.search) ?? `${url.pathname}${url.search}`);
+}
+
 createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://local');
   try {
+    const canonical = canonicalTarget(req, url);
+    if (canonical) {
+      res.writeHead(301, { location: canonical, 'cache-control': 'public, max-age=86400' }).end();
+      return;
+    }
     if (url.pathname.startsWith('/api/')) await api(req, res, url);
     else await serveStatic(req, res, url);
   } catch (error) {

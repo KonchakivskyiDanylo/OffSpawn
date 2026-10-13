@@ -366,7 +366,7 @@ function Game({ roster, facts, pools }: { roster: Roster; facts: Facts; pools: P
           ) : null}
 
           {/*
-            Random first, then the list — the same shape as Tenaball's picker,
+            Random first, then the list — the same shape as Tenite's picker,
             and for the same reason. The categories grew from five hand-picked
             ones to a few dozen, which is past the point where a wall of cards
             is a choice rather than a search.

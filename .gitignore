@@ -31,5 +31,6 @@ liquipedia_data/clean_data/fortnite/*
 # socials.json stays out of git, see server/socials.ts.
 !liquipedia_data/clean_data/fortnite/links.json
 
-# Python bytecode from scripts/
+# Python bytecode from scripts/, and the virtualenv the data scripts run in
 __pycache__/
+.venv/

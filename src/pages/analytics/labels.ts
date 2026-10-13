@@ -25,7 +25,7 @@ export const SOURCE_HINT: Record<Source, string> = {
   random: 'the shared picker left on Random',
   chosen: 'the picker on Choose: a region and a difficulty',
   event: 'an event field in force, from the home page',
-  own: 'Higher or Lower, Tic Tac Toe, Tenaball and List, which set themselves up',
+  own: 'Higher or Lower, Tic Tac Toe, Tenite and List, which set themselves up',
 };
 
 export const OUTCOME_LABEL: Record<Outcome, string> = {

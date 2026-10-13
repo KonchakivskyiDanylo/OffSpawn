@@ -6,6 +6,8 @@ import { membersOf, type Board, type BoardMember, type BoardRow } from '@/data/l
 export type Difficulty = 'easy' | 'hard';
 
 export const HARD_LIVES = 3;
+/** The daily's lives, more than practice Hard (the user, 13 Oct 2026: "more lives for daily tenaball, like 5"). */
+export const DAILY_LIVES = 5;
 export const SLOTS = 10;
 
 export interface Slot {
@@ -63,17 +65,20 @@ export interface GameState {
   /** Labels of wrong answers, in the order they were given. */
   wrong: string[];
   lives: number;
+  /** The lives the round started with: `HARD_LIVES` in practice, `DAILY_LIVES` on the daily. */
+  maxLives: number;
   status: 'playing' | 'won' | 'lost';
 }
 
-export function createGame(board: Board, difficulty: Difficulty): GameState {
+export function createGame(board: Board, difficulty: Difficulty, maxLives = HARD_LIVES): GameState {
   return {
     board,
     difficulty,
     found: new Set(),
     named: new Map(),
     wrong: [],
-    lives: difficulty === 'hard' ? HARD_LIVES : Number.POSITIVE_INFINITY,
+    lives: difficulty === 'hard' ? maxLives : Number.POSITIVE_INFINITY,
+    maxLives,
     status: 'playing',
   };
 }
@@ -97,8 +102,12 @@ export type GuessOutcome =
   | { kind: 'duplicate'; rank: number }
   /** Level with the entry already holding a shared 10th — costs nothing. */
   | { kind: 'level'; rank: number; holder: string }
-  /** One place past the cut-off — costs nothing. `level` when genuinely tied. */
-  | { kind: 'tied'; level: boolean }
+  /**
+   * The 11th: wrong, and it costs a life like any wrong answer — the game only
+   * says how close it was. `level` when it is tied with 10th on the value and
+   * lost on the tie rule.
+   */
+  | { kind: 'eleventh'; level: boolean }
   | { kind: 'wrong' }
   /** The text did not resolve to anything the board could judge. */
   | { kind: 'unknown' };
@@ -111,15 +120,20 @@ export type GuessOutcome =
  * it is one player's page name, and the row it belongs to is the one that owns
  * that name.
  *
- * The near-miss rule can only see one place past the cut. `next` is the 11th
- * entry and is the case that actually stings: naming the player who is level
- * with 10th and lost the tiebreak. A 12th also level with 11th is invisible
- * here, because the board ships ten rows and one spare rather than the whole
- * ranking — which is the trade that keeps the file small enough to ship.
+ * Naming the 11th (`next`) is a wrong answer and costs a life: the top 11 is
+ * still not the top 10 (the user, 13 Oct 2026 — it used to be a free near
+ * miss). The game still says it was 11th, which is worth knowing and gives
+ * nothing away. A 12th is invisible here, because the board ships ten rows and
+ * one spare rather than the whole ranking — the trade that keeps the file small
+ * enough to ship.
  *
  * `level` says whether the 11th is really tied with the 10th or merely next in
  * line: on a money board it almost never is, and on a board of finishing
  * positions it never is, so the message the two deserve is not the same one.
+ *
+ * The one free answer left is a shared cut (`shareCut`): there 10th and 11th
+ * are level on everything, both are right, and naming the second after the
+ * first is told it is level and costs nothing.
  */
 export function applyGuess(
   state: GameState,
@@ -168,10 +182,7 @@ export function applyGuess(
   }
 
   const tenth = state.board.rows[state.board.rows.length - 1];
-  if (membersOf(state.board.next).some((member) => member.key === key)) {
-    return { state, outcome: { kind: 'tied', level: state.board.next.value === tenth.value } };
-  }
-
+  const eleventh = membersOf(state.board.next).some((member) => member.key === key);
   const lives = state.difficulty === 'hard' ? state.lives - 1 : state.lives;
   return {
     state: {
@@ -180,7 +191,7 @@ export function applyGuess(
       lives,
       status: lives <= 0 ? 'lost' : 'playing',
     },
-    outcome: { kind: 'wrong' },
+    outcome: eleventh ? { kind: 'eleventh', level: state.board.next.value === tenth.value } : { kind: 'wrong' },
   };
 }
 

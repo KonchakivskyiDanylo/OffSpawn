@@ -30,7 +30,7 @@ import './which-lobby.css';
 const meta = getGame('which-lobby')!;
 
 const LEVELS: LevelOption<Level>[] = [
-  { id: 'easy', label: LEVEL_LABEL.easy, hint: 'The LANs and the Europe and North America finals. Famous finishers.' },
+  { id: 'easy', label: LEVEL_LABEL.easy, hint: 'The major LANs and the Europe and North America finals. Famous finishers.' },
   { id: 'medium', label: LEVEL_LABEL.medium, hint: 'NA West and Brazil too.' },
   { id: 'hard', label: LEVEL_LABEL.hard, hint: 'Every region, anyone in the results.' },
 ];

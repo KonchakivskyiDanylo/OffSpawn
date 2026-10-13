@@ -113,7 +113,7 @@ function playerKinds(roster: Roster, facts: Facts, socials: Socials | null): Pla
     [
       {
         id: 'lan-apps',
-        title: 'LAN appearances',
+        title: 'Major LAN appearances',
         kind: 'count',
         value: (player) => facts.of(player.id).lanApps,
         display: count('LAN'),

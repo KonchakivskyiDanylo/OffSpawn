@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react';
 import { poolSetup, sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
-import { CountryBadge } from '@/components/CountryBadge';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
 import { PlayerSearch } from '@/components/PlayerSearch';
@@ -291,10 +290,9 @@ function Game({
                     <span className="board-card__num">{index + 1}</span>
                     {isNew ? <span className="board-card__flag">new</span> : null}
                     <PlayerAvatar player={clue.player} size={42} />
-                    <span className="board-card__title">
-                      <CountryBadge code={clue.player.country} name={clue.player.countryName} /> {clue.player.name}
-                    </span>
-                    <span className="board-card__meta">{clue.player.team ?? clue.player.countryName ?? '—'}</span>
+                    <span className="board-card__title">{clue.player.name}</span>
+                    {/* Country only, spelled out: no org, no country code (the user, 13 Oct 2026). */}
+                    <span className="board-card__meta">{clue.player.countryName ?? '—'}</span>
                     <span className="board-card__meta" style={{ fontWeight: 700 }}>
                       {shown ? plural(clue.events, 'tournament') : '? tournaments'}
                     </span>

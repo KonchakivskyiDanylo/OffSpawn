@@ -4,17 +4,54 @@ Do this once a week, or the day after a big event. It takes about five to ten
 minutes, and you can run it any time — a longer gap just means a few more
 requests.
 
-Everything below runs in a terminal (PowerShell) in the Chill folder.
+Everything below runs in a terminal (PowerShell) in the OffSpawn folder.
 
 ---
 
 ## First time only
 
+These are once per computer. A fresh `git clone` has none of them: no Python
+packages, no keys and no raw dump.
+
+### Python
+
+The data scripts run in their own Python environment, `.venv` in this folder
+(git ignores it). Python 3.12 or newer:
+
+```powershell
+py -m venv .venv
+```
+
+```powershell
+.venv\Scripts\python -m pip install -r requirements.txt
+```
+
+Every `.venv\Scripts\python` command below needs this. Without it you get
+`ModuleNotFoundError: No module named 'pandas'` or `requests`, or PowerShell
+says `.venv\Scripts\python` is not recognised. `requirements.txt` keeps pandas
+below 3: the cleaning step was written for pandas 2.
+
+### The raw dump
+
+Step 1 below only fetches what changed since the last run, and it keeps
+everything it fetched in `liquipedia_data/raw_data/fortnite/`. That folder is
+not in git (it is over 500 MB), so on a new computer it is empty, and the first
+run reads every table whole: about 470 requests, **roughly eight hours** at
+the key's 60 an hour. Two ways:
+
+- **Copy it** from the computer that last updated the data: the whole
+  `liquipedia_data\raw_data` folder, into the same place here. Step 1 then
+  carries on from that computer's last run and takes the usual few minutes.
+- **Or let it run**, in the evening. It waits for the limit by itself, and
+  Ctrl+C is safe: run the same command again and it carries on.
+
+### Keys
+
 `setx` keeps a setting for good, so **open a new terminal after the last one**
 — the terminal you ran it in does not see it yet. Never put a key in a file in
 this repo, or in a commit.
 
-### Liquipedia
+#### Liquipedia
 
 Your Liquipedia API key and a way to contact you:
 
@@ -26,7 +63,7 @@ setx LIQUIPEDIA_API_KEY "paste-your-key-here"
 setx LIQUIPEDIA_USER_AGENT "OffSpawn/1.0 (your-email@example.com)"
 ```
 
-### YouTube (for subscriber counts)
+#### YouTube (for subscriber counts)
 
 1. Open https://console.cloud.google.com and sign in with a Google account.
 2. Create a project (top bar → the project picker → **New project**, any name).
@@ -42,7 +79,7 @@ setx YOUTUBE_API_KEY "paste-the-key-here"
 It is free: 10,000 units a day. The first run spends about 1,500–1,900, every
 run after it about 70.
 
-### Twitch (for follower counts)
+#### Twitch (for follower counts)
 
 1. Turn on two-factor authentication on your Twitch account (Twitch asks for it
    before you can register an app).
@@ -183,6 +220,9 @@ page ever says "Not on the site" for Twitch, log in again there.
 
 | You see | It means | Do |
 | --- | --- | --- |
+| `.venv\Scripts\python` is not recognised, or `No module named 'pandas'` / `'requests'` | this computer has no `.venv` yet | do "First time only" → "Python" |
+| `No raw dump in … raw_data\fortnite - run scripts/liquipedia_api.py first` (step 3) | step 1 has never run on this computer | do "First time only" → "The raw dump" |
+| step 1 runs for hours, and its tables end `player: 0 -> 5,741 rows` and so on | there was no raw dump here, so it read everything | expected once on a new computer; see "The raw dump" |
 | `60 requests in the last hour - waiting …` | the key's hourly limit | nothing, leave it running |
 | `rate limited (429) - waiting …` | Liquipedia asked it to wait | nothing, leave it running |
 | you pressed Ctrl+C | — | run the same command again; it carries on where it stopped |
@@ -264,7 +304,7 @@ After changing one, you do not need Liquipedia again:
 somewhere` builds into another folder so you can compare before touching the
 real files.
 
-**A new season.** Tenaball's average-finish boards find each year's events on
+**A new season.** Tenite's average-finish boards find each year's events on
 their own: the rounds of FNCS grand finals by date, and Epic's LANs. List's
 "played all 5 big events of 2026" still reads the events named in `SEASON_YEAR`
 and `SEASON_EVENTS` in `derived.py`. Change those when the year's big events

@@ -30,7 +30,7 @@ survives until it gets built. Each item is marked:
 | Day one of the event | 26 September: the appearances board |
 | Results from | 27 September for day one, 28 September for the whole event |
 
-The plans below had 19 categories each. The subscribers one goes (Tenaball 11
+The plans below had 19 categories each. The subscribers one goes (Tenite 11
 and List 9), because nothing has that data, which leaves **18 per game, one
 per day**. It comes back once there is a source.
 
@@ -46,9 +46,9 @@ per day**. It comes back once there is a source.
 
 ## The fortnight, day by day
 
-Tenaball and List numbers are the categories in the tables further down.
+Tenite and List numbers are the categories in the tables further down.
 
-| Day | Date | Tenaball | List |
+| Day | Date | Tenite | List |
 | --- | --- | --- | --- |
 | 1 | Wed 16 Sep | 1 career earnings | 1 European qualifiers |
 | 2 | Thu 17 Sep | 2 youngest | 2 FNCS winners this year |
@@ -72,7 +72,7 @@ Tenaball and List numbers are the categories in the tables further down.
 Days 12 onwards need the export refreshed with results the evening before.
 Day 12 needs day one's results by the night of the 26th.
 
-## Tenaball: qualified players only
+## Tenite: qualified players only
 
 In event mode today these are the field's boards, under one heading, in this
 order (`games/tenaball/pool-boards.ts`). Two more follow them: tournaments

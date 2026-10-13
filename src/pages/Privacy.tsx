@@ -59,7 +59,7 @@ export function Privacy() {
         </p>
         <p className="small">
           It also counts when a page is opened and when a round is started, to see which games people open and
-          how many go on to play. These are kept only as totals per hour — “Tenaball was opened 40 times between
+          how many go on to play. These are kept only as totals per hour — “Tenite was opened 40 times between
           six and seven” — never as a record of a visit, and nothing is stored in your browser for them.
         </p>
         <p className="small">

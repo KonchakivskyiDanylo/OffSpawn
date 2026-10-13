@@ -1,0 +1,5 @@
+# The data scripts in scripts/ (see UPDATE_DATA.md, "First time only").
+# pandas 2: scripts/pipeline/clean.py relies on pandas 2's strings, e.g.
+# `.astype(str)` turning a missing value into "nan"; pandas 3 changed that.
+pandas>=2.2,<3
+requests>=2.31

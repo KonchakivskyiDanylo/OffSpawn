@@ -10,6 +10,7 @@
  * touches a real database or `server/.data`.
  */
 import { spawn } from 'node:child_process';
+import { request as httpRequest } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -157,7 +158,52 @@ try {
   );
   check(data.traffic?.landing[0]?.label === 'home', 'the visit did not land on the home page');
   const tenaball = data.traffic?.games.find((g) => g.game === 'tenaball');
-  check(tenaball?.unlimited.opens === 1 && tenaball.unlimited.starts === 2 && tenaball.daily.opens === 0, `Tenaball's halves read ${JSON.stringify(tenaball)}`);
+  check(tenaball?.unlimited.opens === 1 && tenaball.unlimited.starts === 2 && tenaball.daily.opens === 0, `Tenite's halves read ${JSON.stringify(tenaball)}`);
+
+  // A renamed game's old address — every shared Tenaball result ends in one — is a 301 to the new one.
+  for (const [from, to] of [
+    ['/game/tenaball?puzzle=3', '/game/tenite?puzzle=3'],
+    ['/game/tenaball/', '/game/tenite'],
+    ['/game/wordle', '/game/fortnitedle'],
+  ]) {
+    const moved = await fetch(`${BASE}${from}`, { redirect: 'manual' });
+    check(moved.status === 301 && moved.headers.get('location') === to, `${from} answered ${moved.status} → ${moved.headers.get('location')}, expected 301 → ${to}`);
+  }
+  const current = await fetch(`${BASE}/game/tenite`, { redirect: 'manual' });
+  check(current.status !== 301, '/game/tenite redirects, but it is the current address');
+
+  // One address for the site: www. and http:// pages go to https://offspawn.app, as
+  // Heroku hands them over (Host, x-forwarded-proto). API calls and other hosts pass.
+  const asHeroku = (route: string, host: string, proto: string, method = 'GET') =>
+    new Promise<{ status: number; location: string | null }>((resolve, reject) => {
+      const req = httpRequest(
+        { host: 'localhost', port: PORT, path: route, method, headers: { host, 'x-forwarded-proto': proto } },
+        (res) => {
+          res.resume();
+          resolve({ status: res.statusCode ?? 0, location: res.headers.location ?? null });
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+  for (const [route, host, proto, to] of [
+    ['/', 'www.offspawn.app', 'https', 'https://offspawn.app/'],
+    ['/game/tic-tac-toe', 'www.offspawn.app', 'http', 'https://offspawn.app/game/tic-tac-toe'],
+    ['/credits', 'offspawn.app', 'http', 'https://offspawn.app/credits'],
+    ['/game/tenaball?puzzle=3', 'www.offspawn.app', 'http', 'https://offspawn.app/game/tenite?puzzle=3'],
+  ] as const) {
+    const got = await asHeroku(route, host, proto);
+    check(got.status === 301 && got.location === to, `${proto}://${host}${route} answered ${got.status} → ${got.location}, expected 301 → ${to}`);
+  }
+  for (const [route, host, proto, method] of [
+    ['/game/tic-tac-toe', 'offspawn.app', 'https', 'GET'],
+    ['/api/daily/2026-10-05', 'www.offspawn.app', 'http', 'GET'],
+    ['/api/support', 'www.offspawn.app', 'https', 'POST'],
+    ['/game/tic-tac-toe', 'offspawn-1234.herokuapp.com', 'https', 'GET'],
+  ] as const) {
+    const got = await asHeroku(route, host, proto, method);
+    check(got.status !== 301, `${method} ${proto}://${host}${route} was redirected to ${got.location}`);
+  }
   check(data.traffic?.hours.flat().reduce((a, b) => a + b, 0) === 3, 'the hours do not hold the three page opens');
   const daily = (await request('/api/admin/dashboard?days=7&source=daily', {}, cookie)).body as typeof data;
   check(daily?.traffic?.totals.opens === 1 && daily.traffic.totals.starts === 1, `the daily filter reads ${JSON.stringify(daily?.traffic?.totals)}`);

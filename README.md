@@ -43,7 +43,7 @@ To bring it up to date: [UPDATE_DATA.md](UPDATE_DATA.md).**
 | Fortnitedle | — | 6 guesses, digits are playable characters. From guess 3 every round says the name has a digit — never which one, how many or where |
 | Career Path | Order / Random | 10 clues, picked for a mix of finishes on recognisable stages, spread across the career, never opening on a famous player's signature result, and describing exactly one player wherever the career allows it (a duo partner is ruled out). Order reads them by date, Random in no order |
 | Who Are Ya? | Counts shown / hidden / Random order | Ten clues drawn across up to fifty teammates, number one always among them, revealed fewest-shared first. Needs 3+ teammates and 5+ tournaments on record |
-| Tenaball | ~290 categories × Easy / Hard | Boards answer in players, organisations, countries *or* tournaments. Each states its own tie rule. A tournament board is ten placements, so a duos slot wants both names |
+| Tenite | ~290 categories × Easy / Hard | Boards answer in players, organisations, countries *or* tournaments. Each states its own tie rule. A tournament board is ten placements, so a duos slot wants both names |
 | List | Easy / Hard | ~180 categories. 90s, +5s per correct answer, −3s per miss on Hard. Naming everyone ends the round as a win |
 | Griefer | All at once / One by one | Ten cards, four to six of which **fit** the rule, and the board never says how many. Cards show the handle only |
 | Tic Tac Toe | Easy / Medium / Hard | Type any player; the grid only offers cells that keep the board solvable, and places them itself when there is one. Easy boards have 3+ household names per cell, Medium 2+ regulars; Hard may have one answer. Lives shown as hearts: 3, 3 and 1 |
@@ -54,12 +54,12 @@ Six of the ten share a **setup step** (`components/PoolSetup`), and it opens
 closed: Random, or Choose to narrow by region, difficulty and active/retired.
 Higher or Lower and Tic Tac Toe have a single Easy / Medium / Hard instead
 (`LevelSetup`), which sets both who they ask about and how hard they ask.
-Tenaball and List pick a category instead, because that is their whole subject.
+Tenite and List pick a category instead, because that is their whole subject.
 
 Above all of them sits the **event mode** (`games/shared/mode.ts`), chosen on
 the home page and shown in the header. Pick a tournament and every game draws
 only from that field until you leave it — the eight setup screens collapse to a
-Start button, and Tenaball and List swap their categories for field-scoped ones
+Start button, and Tenite and List swap their categories for field-scoped ones
 derived in the browser, under one heading and in a planned order. A field is
 lopsided (46 of the 2026 Globals' 101 are European), so the four secret-player
 games take its regions in turn and Higher or Lower leans towards the region a
@@ -67,13 +67,13 @@ run has shown least.
 
 The event mode is the testing ground for a **limited mode**: a fortnight
 around one event, daily puzzles, and nothing else on the site. The plan —
-dates, the day-by-day Tenaball and List categories, the daily schedule per game
+dates, the day-by-day Tenite and List categories, the daily schedule per game
 and what each needs from the data — is in [LIMITED_MODE.md](LIMITED_MODE.md).
 
 Every game's "How to play" ends with **What the words mean**
 (`games/shared/glossary.ts`): what a tournament, a major, a LAN, a Global
 Championship, an FNCS win and a nationality mean here, with the events each
-covers listed from `facts.json`. A Tenaball board or a List prompt shows the
+covers listed from `facts.json`. A Tenite board or a List prompt shows the
 same definitions for the words in its own title under "What counts here".
 Where a game can tie, its rules say how.
 
@@ -103,7 +103,7 @@ which is both its folder and its id.)
 Easy / Medium / Hard means three different things across that table. In the
 shared setup step it is the **fame ranking** below — how well known the players
 you are asked about are, expressed on each card as the career-earnings band it
-covers. Inside Tenaball and List it is that game's own mechanical setting
+covers. Inside Tenite and List it is that game's own mechanical setting
 (lives, time penalties) and has nothing to do with fame. In Higher or Lower and
 Tic Tac Toe it is both at once and the only setting those games have: who the
 game is built around, and how hard it presses.
@@ -121,10 +121,10 @@ All ten games read the **Liquipedia export** in
 | `players.json` | 5,678 playable | every game — identity, earnings, tier, FNCS wins |
 | `career_path.json` | 187 majors; every player with one (1,175 with five or more) | Career Path |
 | `teammates.json` | 39,038 pairs, 5,490 players, 50 kept each | Who Are Ya, List |
-| `orgs.json` | 984 orgs | Griefer, Tic Tac Toe, Connections, Tenaball, Org Chart |
+| `orgs.json` | 984 orgs | Griefer, Tic Tac Toe, Connections, Tenite, Org Chart |
 | `bios.json` | real names and dated organisation stints | IRL, Org Chart, Transfer Window, Rewind (hidden games) |
 | `facts.json` | per-player career facts | Griefer, Tic Tac Toe, Connections, List, Who Are Ya |
-| `rankings.json` | ~290 precomputed leaderboards, plus the event names the paydays boards are answered from | Tenaball |
+| `rankings.json` | ~290 precomputed leaderboards, plus the event names the paydays boards are answered from | Tenite |
 | `pools.json` | event-qualified fields | every game's setup step |
 
 All of them are **built by `scripts/build_data.py`** from the raw dump. A file that has not been generated is simply absent:
@@ -187,7 +187,7 @@ src/
     facts.ts          Career facts players.json cannot answer
     majors.ts         Reads .../career_path.json — Career Path's tournaments
     teammates.ts      Reads .../teammates.json — who has played with whom
-    rankings.ts       The precomputed Tenaball boards
+    rankings.ts       The precomputed Tenite boards
     pools.ts          Event-qualified fields — the event mode reads these
     orgs.ts           Organisations and who has played for them
     countries.ts      Liquipedia nationality names -> ISO country codes
@@ -262,16 +262,16 @@ gracefully rather than dead-ending:
   1-0-1-0-1-0 and nine answers in ten could be called without knowing anyone.
   On Hard a player on nought can be level with another; on Easy and Medium,
   with no Equal button, a shown nought is still a free Higher.
-- Tenaball's tournament boards rank *placements*, so a duos or trios event puts
+- Tenite's tournament boards rank *placements*, so a duos or trios event puts
   the whole team in one slot and only fills it once every name is in. It skips
   an event where two teams share a place in the top eleven, where a player is
   listed twice in it, or where a finisher cannot be named from the roster.
 - Higher or Lower never repeats a player and ends with a win when the pool runs
-  out; List and Tenaball resolve typed names tolerantly (case, spaces, accents,
+  out; List and Tenite resolve typed names tolerantly (case, spaces, accents,
   one typo when unambiguous).
-- Tenaball never punishes a player who is level with 10th but ranked out by the
-  tie rule: the guess is called out as a near miss and costs no life. The rule in
-  force is printed above the ten slots, because it differs per category.
+- Tenite counts the 11th as wrong, level with 10th or not: it costs a life, and
+  the game only says it was 11th (13 Oct 2026). The tie rule in force is printed
+  above the ten slots, because it differs per category.
 
 ## Analytics and support
 
@@ -288,7 +288,7 @@ errors are reported the same way.
 Everything lands on **`/analytics`**, a password-protected page linked from
 nowhere: rounds per game and per day, how each game was set up, and per game
 the numbers that matter for tuning it — which clue solved a Career Path, which
-Tenaball answers nobody finds, which Griefer cards get misread, which Tic Tac
+Tenite answers nobody finds, which Griefer cards get misread, which Tic Tac
 Toe cells stay empty. It is computed from the stored rounds on every load
 (`src/analytics/aggregate.ts`), so it is always live.
 

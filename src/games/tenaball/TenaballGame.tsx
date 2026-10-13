@@ -11,10 +11,12 @@ import { restoreDaily, result as dailyResult, shareGrid, snapshot } from './dail
 import { WhatCounts } from '@/components/Glossary';
 import type { Board } from '@/data/liquipedia/rankings';
 import { loadFacts, type Facts } from '@/data/liquipedia/facts';
+import type { Majors } from '@/data/liquipedia/majors';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Pools } from '@/data/liquipedia/pools';
 import { Rankings } from '@/data/liquipedia/rankings';
 import type { Roster } from '@/data/liquipedia/roster';
+import { useMajors } from '@/data/liquipedia/useMajors';
 import { useOrgs } from '@/data/liquipedia/useOrgs';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRankings } from '@/data/liquipedia/useRankings';
@@ -39,6 +41,7 @@ import {
   record as roundRecord,
 } from './engine';
 import { derivedBoards } from './derived-boards';
+import { globalsBoards } from './globals-boards';
 import { socialBoards } from './social-boards';
 import { useSocials } from '@/data/useSocials';
 import { poolRankings } from './pool-boards';
@@ -55,15 +58,17 @@ export default function TenaballGame() {
   const { roster, error: rosterError } = useRoster();
   const { rankings, error: rankingsError } = useRankings();
   const { orgs, error: orgsError } = useOrgs();
+  // Every player's finish at every major: the Globals boards are built from it.
+  const { majors, error: majorsError } = useMajors();
   const { pools } = usePools();
 
   return (
     <LiquipediaGate
-      error={rosterError ?? rankingsError ?? orgsError}
-      ready={Boolean(roster && rankings && orgs)}
+      error={rosterError ?? rankingsError ?? orgsError ?? majorsError}
+      ready={Boolean(roster && rankings && orgs && majors)}
     >
-      {roster && rankings && orgs ? (
-        <Game roster={roster} rankings={rankings} orgs={orgs} pools={pools} />
+      {roster && rankings && orgs && majors ? (
+        <Game roster={roster} rankings={rankings} orgs={orgs} majors={majors} pools={pools} />
       ) : null}
     </LiquipediaGate>
   );
@@ -73,11 +78,13 @@ function Game({
   roster,
   rankings,
   orgs,
+  majors,
   pools,
 }: {
   roster: Roster;
   rankings: Rankings;
   orgs: Orgs;
+  majors: Majors;
   pools: Pools | null;
 }) {
   const [difficulty, setDifficulty] = useState<Difficulty>('easy');
@@ -87,7 +94,7 @@ function Game({
   const daily = useDailyRound('tenaball', {
     on: dailyOn,
     ready: socials !== null,
-    restore: (puzzle, saved) => restoreDaily(puzzle, rankings, roster, socials, saved),
+    restore: (puzzle, saved) => restoreDaily(puzzle, rankings, roster, socials, majors, saved),
     snapshot,
     finished: (state) => state.status !== 'playing',
     result: dailyResult,
@@ -97,7 +104,7 @@ function Game({
   const setGame = (next: GameState | null) => (dailyOn ? next && daily.setState(next) : setPractice(next));
 
   useRoundRecorder('tenaball', dailyOn ? daily.endedHere : game !== null && game.status !== 'playing', () => ({
-    title: `Tenaball — ${game!.board.title}`,
+    title: `Tenite — ${game!.board.title}`,
     data: rankings.generated,
     setup: dailyOn ? { daily: daily.day, level: game!.difficulty } : { event, level: game!.difficulty },
     ...roundRecord(game!),
@@ -170,10 +177,15 @@ function Game({
       new Rankings({
         generated: rankings.generated,
         slots: rankings.slots,
-        boards: [...rankings.boards, ...derivedBoards(roster.players), ...socialBoards(roster, socials)],
+        boards: [
+          ...rankings.boards,
+          ...globalsBoards(majors, roster),
+          ...derivedBoards(roster.players),
+          ...socialBoards(roster, socials),
+        ],
         tournaments: rankings.tournaments,
       }),
-    [rankings, roster, socials],
+    [rankings, roster, socials, majors],
   );
 
   const active = derived ?? allTime;
@@ -356,12 +368,13 @@ function Game({
           message: `${entity.name} is also ${ordinal(result.outcome.rank)}, level with ${result.outcome.holder} — no penalty.`,
         });
         break;
-      case 'tied':
+      case 'eleventh':
+        // Wrong, and it cost a life; only how close it was is worth saying.
         setFeedback({
-          tone: 'var(--warning)',
+          tone: 'var(--danger)',
           message: result.outcome.level
-            ? `${entity.name} is level with 10th but ranked out by the tie rule — no penalty.`
-            : `${entity.name} is 11th — just outside, so no penalty.`,
+            ? `${entity.name} is level with 10th but ranked out by the tie rule — not in the top ten.`
+            : `${entity.name} is 11th — just outside the top ten.`,
         });
         break;
       default:
@@ -387,7 +400,7 @@ function Game({
         <div className="stats">
           <Stat label="Found" value={`${game.found.size}/${slots.length}`} />
           {game.difficulty === 'hard' ? (
-            <Stat label="Lives" value={<Hearts left={Math.max(0, game.lives)} total={HARD_LIVES} />} />
+            <Stat label="Lives" value={<Hearts left={Math.max(0, game.lives)} total={game.maxLives} />} />
           ) : null}
           <Stat label="Best" value={best} />
         </div>

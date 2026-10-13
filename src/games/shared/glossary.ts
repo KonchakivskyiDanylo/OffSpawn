@@ -80,22 +80,22 @@ export const TERMS: Record<TermId, Term> = {
   },
   lan: {
     id: 'lan',
-    name: 'LAN',
+    name: 'Major LAN',
     text:
-      'A major played offline, in front of a crowd. That is the strict meaning and every LAN question here uses it, except the one Tenaball board that says otherwise. DreamHack, Gamers8 and other offline events Epic did not run are not LANs here, and neither are the practice cash cups held at one.',
+      'A major played offline, in front of a crowd: Epic’s own LAN finals, listed below. DreamHack, Gamers8 and other offline events Epic did not run are not major LANs, and neither are the practice cash cups held at one.',
     events: (facts) => ({ names: named(facts.events.filter((event) => event.lan)) }),
   },
   'lan-wide': {
     id: 'lan-wide',
-    name: 'LAN, on the “LAN wins” board',
+    name: 'LAN',
     text:
-      'That one board widens it to any offline main event in Liquipedia’s top two tiers, so DreamHack, Gamers8 and the Esports World Cup count alongside Epic’s own LANs.',
+      'Any offline main event in Liquipedia’s top two tiers: Epic’s major LANs, and DreamHack, Gamers8 and the Esports World Cup alongside them. Only the “LAN wins” board counts this way; everywhere else it is a major LAN.',
   },
   global: {
     id: 'global',
     name: 'Global Championship',
     text:
-      'The events every region qualifies into: the 2019 World Cup finals, solo and duos, and the FNCS Global Championships held since 2023. A Globals is a title of its own — winning one does not add to a player’s FNCS wins.',
+      'The FNCS Global Championship, held once a year since 2023: the offline final every region qualifies into. The 2019 World Cup is not one. A Globals is a title of its own — winning one does not add to a player’s FNCS wins.',
     events: (facts) => ({ names: named(facts.events.filter((event) => event.kind === 'global')) }),
   },
   'fncs-title': {
@@ -190,8 +190,14 @@ export const TERMS: Record<TermId, Term> = {
  * there for the one board whose LAN is the wide one, and for an event field's
  * boards and lists (`pool:…`), whose titles carry the event's name: every one
  * of them mentioned the Globals, so every one explained what a Globals is.
+ *
+ * A board about one event (`tournament:…`, its top ten placements) explains
+ * nothing: "Top 10 at FNCS 2023 Global Championship" needs no definition of a
+ * Globals, and an FNCS final's board none of finals or regions. Definitions are
+ * for the boards that gather many events under one word (the user, 13 Oct 2026).
  */
 export function termsIn(text: string, id = ''): TermId[] {
+  if (id.startsWith('tournament:')) return [];
   const found = new Set<TermId>();
   const field = id.startsWith('pool:');
   // The average-finish boards: their region is the final's, and their duos
@@ -201,10 +207,13 @@ export function termsIn(text: string, id = ''): TermId[] {
   const weekly = /^(divcup|fpe)/.test(id);
   const region = /\bby region\b|Europe|North America|South America|Brazil|\bAsia\b|Oceania|Middle East|\bNA (East|West|Central)\b/i;
   if (field) found.add('field');
+  // "Major LAN" is the strict meaning, and so is a bare "LAN" anywhere but the
+  // one board that widens it.
   if (/\bLANs?\b/.test(text)) found.add(id === 'lan-wins' ? 'lan-wide' : 'lan');
-  // "Major 1 Summit" is an event's name, not the word.
-  if (/\bmajors?\b(?! \d)/i.test(text)) found.add('major');
-  if (!field && /Global Championship|World Cup|\bGlobals?\b/i.test(text)) found.add('global');
+  // "Major 1 Summit" is an event's name, not the word; "major LAN" has its own term.
+  if (/\bmajors?\b(?! \d| LAN)/i.test(text)) found.add('major');
+  // Not "World Cup": the 2019 World Cup is not a Global Championship here.
+  if (!field && /Global Championship|\bGlobals?\b/i.test(text)) found.add('global');
   if (/FNCS (wins?|titles?)|won (an|the|their region’s) FNCS|FNCS (grand final )?winners?|Won [A-Z]+ FNCS|finals won/i.test(text)) {
     found.add('fncs-title');
   }

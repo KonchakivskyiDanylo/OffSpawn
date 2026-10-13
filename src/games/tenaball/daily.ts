@@ -1,3 +1,4 @@
+import type { Majors } from '@/data/liquipedia/majors';
 import type { Board, Rankings } from '@/data/liquipedia/rankings';
 import { membersOf } from '@/data/liquipedia/rankings';
 import type { Roster } from '@/data/liquipedia/roster';
@@ -5,11 +6,12 @@ import { knownPlayers } from '@/daily/fame';
 import { answerSig, resting, spaced } from '@/daily/reuse';
 import type { Socials } from '@/data/socials';
 import { DAILY_SOCIAL, SOCIAL_GROUP, socialBoards } from './social-boards';
+import { globalsBoards } from './globals-boards';
 import type { DailyContext, DailyPuzzles, DailyResult } from '@/daily/types';
 import { pick } from '@/lib/rng';
-import { createGame, HARD_LIVES, namedIn, slotsIn, type Difficulty, type GameState } from './engine';
+import { createGame, DAILY_LIVES, HARD_LIVES, namedIn, slotsIn, type Difficulty, type GameState } from './engine';
 
-/** Three lives, so the daily ends on its own and the score is how many you found. */
+/** Hard, on `DAILY_LIVES` lives, so the daily ends on its own and the score is how many you found. */
 export const DAILY_LEVEL: Difficulty = 'hard';
 
 type Puzzle = DailyPuzzles['tenaball'];
@@ -32,6 +34,8 @@ const KINDS: { kind: string; groups: RegExp }[] = [
   { kind: 'events', groups: /^(Tournaments|FNCS finals — (Europe|North America))$/ },
   { kind: 'orgs', groups: /^(Organisations|Countries)$/ },
   { kind: 'divcups', groups: /^Div Cups — all time$/ },
+  // The Globals across the years, built from the majors (`globals-boards.ts`).
+  { kind: 'globals', groups: /^Global Championships$/ },
   // Twitch and YouTube, built from the day's counts (`social-boards.ts`).
   { kind: 'followers', groups: /^Followers$/ },
 ];
@@ -83,14 +87,23 @@ function famousEnough(board: Board, known: ReadonlySet<string>): boolean {
   return rows.length >= FAMOUS_ROWS;
 }
 
-/** Every board a daily can name: the shipped set, and the follower boards while there are counts. */
-function boardsWith(rankings: Rankings, roster: Roster, socials: Socials | null): Board[] {
-  return [...rankings.boards, ...socialBoards(roster, socials)];
+/**
+ * Every board a daily can name: the shipped set, the Globals boards, and the
+ * follower boards while there are counts. The schedule editor reads the same list.
+ */
+export function dailyBoards(rankings: Rankings, roster: Roster, socials: Socials | null, majors: Majors | null): Board[] {
+  return [...rankings.boards, ...(majors ? globalsBoards(majors, roster) : []), ...socialBoards(roster, socials)];
 }
 
-export function pickDaily(roster: Roster, rankings: Rankings, socials: Socials | null, ctx: DailyContext): Puzzle | null {
+export function pickDaily(
+  roster: Roster,
+  rankings: Rankings,
+  socials: Socials | null,
+  majors: Majors | null,
+  ctx: DailyContext,
+): Puzzle | null {
   const known = knownPlayers(roster);
-  const all = boardsWith(rankings, roster, socials);
+  const all = dailyBoards(rankings, roster, socials, majors);
   const byId = new Map(all.map((board) => [board.id, board]));
   // A follower board is famous by what it ranks, so it skips the fame test — but
   // only the big ones: the world, Europe, North America, the FNCS champions.
@@ -121,6 +134,8 @@ export interface Snapshot {
   found: number[];
   wrong: string[];
   lives: number;
+  /** Absent from a round saved while the daily had `HARD_LIVES` (before 13 Oct 2026). */
+  maxLives?: number;
   status: GameState['status'];
 }
 
@@ -129,18 +144,24 @@ export function restoreDaily(
   rankings: Rankings,
   roster: Roster,
   socials: Socials | null,
+  majors: Majors | null,
   saved: Snapshot | null,
 ): GameState | null {
-  const board = boardsWith(rankings, roster, socials).find((candidate) => candidate.id === puzzle.board);
+  const board = dailyBoards(rankings, roster, socials, majors).find((candidate) => candidate.id === puzzle.board);
   if (!board) return null;
-  const fresh = createGame(board, DAILY_LEVEL);
+  const fresh = createGame(board, DAILY_LEVEL, DAILY_LIVES);
   if (!saved) return fresh;
+  // A round begun on the old three lives and still going gets the two new ones;
+  // a finished one keeps the hearts it ended on, out of the total it had.
+  const was = saved.maxLives ?? HARD_LIVES;
+  const playing = saved.status === 'playing';
   return {
     ...fresh,
     named: new Map(saved.named.map(([rank, keys]) => [rank, new Set(keys)])),
     found: new Set(saved.found),
     wrong: saved.wrong,
-    lives: saved.lives,
+    lives: playing ? saved.lives + DAILY_LIVES - was : saved.lives,
+    maxLives: playing ? DAILY_LIVES : was,
     status: saved.status,
   };
 }
@@ -151,6 +172,7 @@ export function snapshot(state: GameState): Snapshot {
     found: [...state.found],
     wrong: state.wrong,
     lives: state.lives,
+    maxLives: state.maxLives,
     status: state.status,
   };
 }
@@ -167,10 +189,10 @@ export function shareGrid(state: GameState): string[] {
   const squares = slotsIn(state).map((slot) =>
     state.found.has(slot.rank) ? '🟩' : namedIn(state, slot.rank).size > 0 ? '🟨' : '⬛',
   );
-  const lives = Math.max(0, Math.min(HARD_LIVES, state.lives));
+  const lives = Math.max(0, Math.min(state.maxLives, state.lives));
   return [
     squares.slice(0, 5).join(''),
     squares.slice(5).join(''),
-    '❤️'.repeat(lives) + '🖤'.repeat(HARD_LIVES - lives),
+    '❤️'.repeat(lives) + '🖤'.repeat(state.maxLives - lives),
   ];
 }

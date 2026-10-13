@@ -4,8 +4,7 @@ import { puzzleFor as careerPuzzle, dailyPool as careerPool } from '@/games/care
 import { buildCriteria, type Criterion } from '@/games/list/criteria';
 import { listSig } from '@/games/list/daily';
 import { levelPlayers } from '@/games/shared/levels';
-import { boardSig } from '@/games/tenaball/daily';
-import { socialBoards } from '@/games/tenaball/social-boards';
+import { boardSig, dailyBoards } from '@/games/tenaball/daily';
 import { boardRules } from '@/games/tic-tac-toe/engine';
 import { dailyPools } from '@/games/tic-tac-toe/daily';
 import { puzzleFor as whoPuzzle, dailyPool as whoPool } from '@/games/who-are-ya/daily';
@@ -64,11 +63,11 @@ const lookups = new WeakMap<
 function lookup(data: DailyData) {
   let found = lookups.get(data);
   if (!found) {
-    const { roster, rankings, facts, orgs, teammates } = data;
+    const { roster, rankings, facts, orgs, teammates, majors } = data;
     const socials = data.socials ?? null;
     found = {
       byId: new Map(roster.players.map((player) => [player.id, player])),
-      boards: new Map([...rankings.boards, ...socialBoards(roster, socials)].map((board) => [board.id, board])),
+      boards: new Map(dailyBoards(rankings, roster, socials, majors).map((board) => [board.id, board])),
       lists: new Map(buildCriteria(roster, facts, null, orgs, teammates, socials).map((list) => [list.id, list])),
       rules: new Map(
         boardRules({ facts, orgs, socials }, dailyPools(roster, facts)).map((rule) => [rule.id, rule.short]),

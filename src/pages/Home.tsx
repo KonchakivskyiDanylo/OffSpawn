@@ -2,9 +2,8 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useOpen } from '@/analytics/client';
 import { ModePicker } from '@/components/EventMode';
-import { PastPuzzlesButton } from '@/components/PastPuzzles';
 import { loadDailySet } from '@/daily/client';
-import { DAILY_START, puzzleLabel, puzzleNumber } from '@/daily/day';
+import { DAILY_START } from '@/daily/day';
 import { gameStats, useDailyLogs } from '@/daily/progress';
 import { isLiveDaily, type DailyGame } from '@/daily/types';
 import { useCountdown, useToday } from '@/daily/useDay';
@@ -108,15 +107,16 @@ export function Home() {
       <section className="stack">
         <div className="home-today">
           <div>
+            {/* No puzzle number: each game counts its own days, so one number cannot
+                stand for them all. Earlier puzzles live inside each game (the user, 13 Oct 2026). */}
             <div className="card__title" style={{ marginBottom: 2 }}>
-              Today’s puzzles {puzzleLabel(puzzleNumber(today))}
+              Today’s puzzles
             </div>
             <div className="home-today__done">
               {doneToday === dailies.length ? 'All done for today ✓' : `${doneToday} of ${dailies.length} played`}
             </div>
           </div>
           <div className="home-today__side">
-            <PastPuzzlesButton games={dailies.map((game) => game.id as DailyGame)} />
             <span className="home-today__next">
               Next in <strong>{countdown}</strong>
             </span>

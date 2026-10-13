@@ -136,7 +136,7 @@ export function pickPuzzle<G extends DailyGame>(game: G, data: DailyData, ctx: D
     wordle: () => wordle(roster, ctx),
     'career-path': () => careerPath(roster, majors, ctx),
     'who-are-ya': () => whoAreYa(roster, teammates, facts, byId, ctx),
-    tenaball: () => tenaball(roster, rankings, socials, ctx),
+    tenaball: () => tenaball(roster, rankings, socials, majors, ctx),
     list: () => list(roster, buildCriteria(roster, facts, null, orgs, teammates, socials), ctx),
     'tic-tac-toe': () => ticTacToe(roster, facts, orgs, socials, ctx),
   };

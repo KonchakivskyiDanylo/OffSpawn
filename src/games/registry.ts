@@ -257,32 +257,34 @@ export const GAMES: GameMeta[] = [
     Component: lazy(() => import('./who-are-ya/WhoAreYaGame')),
   },
   {
+    // Tenaball until 13 Oct 2026 (the user: a football name). The id stays, so
+    // best scores and daily progress carry over; the old address redirects.
     id: 'tenaball',
     socials: true,
-    slug: 'tenaball',
-    title: 'Tenaball',
+    slug: 'tenite',
+    title: 'Tenite',
     tagline: 'Find all ten players in a top 10.',
     seo: {
-      title: 'Tenaball: name the competitive Fortnite top 10',
+      title: 'Tenite: name the competitive Fortnite top 10',
       description:
         'One competitive Fortnite leaderboard, ten empty slots: top earners, FNCS and LAN results, Div Cups, countries and organisations. Name all ten.',
     },
     icon: '🔟',
     intro: [
-      'You get one leaderboard — "Top 10 by LAN earnings", "Top 10 countries by FNCS wins" — and ten empty slots. Name the ten.',
+      'You get one leaderboard — "Top 10 by major LAN earnings", "Top 10 countries by FNCS wins" — and ten empty slots. Name the ten.',
       'Correct answers lock into their real position, so the board fills in from wherever you happen to know it.',
     ],
     rules: [
       'Easy: unlimited guesses — just find all ten.',
-      'Hard: 3 lives, and every wrong guess costs one.',
+      'Hard: 3 lives, and every wrong guess costs one — the player in 11th too.',
       'On a duos or trios board a slot is a whole team, and it locks once you have named everyone on it.',
-      '“What counts here” under each board explains its words — which events are majors or LANs, whose nationality a dual national counts for.',
+      '“What counts here” under each board explains its words — which events count as a major or a major LAN, whose nationality a dual national counts for.',
     ],
     daily: {
       rules: [
-        '3 lives: every wrong guess costs one.',
+        '5 lives: every wrong guess costs one — the player in 11th too.',
         'On a duos or trios board a slot is a whole team, and it locks once you have named everyone on it.',
-        '“What counts here” under the board explains its words — which events are majors or LANs, whose nationality a dual national counts for.',
+        '“What counts here” under the board explains its words — which events count as a major or a major LAN, whose nationality a dual national counts for.',
       ],
     },
     sections: [
@@ -299,7 +301,7 @@ export const GAMES: GameMeta[] = [
         items: [
           'Every board shows its tie rule above the slots. On most boards that count something, players level on the count are split by career earnings.',
           'If 10th and 11th are still level after that, either one fills 10th, and the board says so.',
-          'Naming the player in 11th is a near miss: the game tells you, and it costs no life.',
+          'Naming the player in 11th is a wrong answer like any other. The game tells you it was 11th, but it still costs a life.',
         ],
       },
     ],
@@ -360,7 +362,7 @@ export const GAMES: GameMeta[] = [
         practiceOnly: true,
         items: [
           'Over three hundred: an organisation’s players, FNCS winners by region or year, Div Cups, earnings thresholds, countries, the top earners’ teammates, and who played two events.',
-          '“What counts here” under each list explains its words — which events are LANs or majors, whose nationality a dual national counts for.',
+          '“What counts here” under each list explains its words — which events count as a major or a major LAN, whose nationality a dual national counts for.',
         ],
       },
     ],
@@ -389,7 +391,7 @@ export const GAMES: GameMeta[] = [
     tagline: 'Spot the players who actually belong.',
     icon: '🕵️',
     intro: [
-      'You get a rule — "has played for NRG", "has won a LAN" — and a board of ten players. Four to six of them fit the rule. The rest are griefers.',
+      'You get a rule — "has played for NRG", "has won a major LAN" — and a board of ten players. Four to six of them fit the rule. The rest are griefers.',
       'Find the ones who fit.',
     ],
     rules: [
@@ -411,10 +413,10 @@ export const GAMES: GameMeta[] = [
         title: 'The rules you will see',
         items: [
           'Organisations — has played for a given org, at any point, not just today.',
-          'Titles — has won an FNCS, a LAN, a global championship, or two or more FNCS titles.',
+          'Titles — has won an FNCS, a major LAN, a Global Championship, or two or more FNCS titles.',
           'Career earnings above a threshold.',
           'Won their region’s FNCS — “has won the EU FNCS” — or won an FNCS in a given year. Regional finals only: a Globals is its own title and counts for neither.',
-          'Played at a specific tournament — the globals and LANs, never a regional qualifier.',
+          'Played at a specific tournament — the Globals and major LANs, never a regional qualifier.',
           'Country and region — in the draw now that the cards carry no flags.',
         ],
       },
@@ -472,7 +474,7 @@ export const GAMES: GameMeta[] = [
         items: [
           'Won EU FNCS, Won FNCS in 2023 — the regional FNCS finals. A Globals is not an FNCS win.',
           'Won FNCS with a famous player, like Peterbot — was on one of their FNCS-winning teams.',
-          'Top 3 at a LAN — a podium finish at any LAN, as defined below.',
+          'Top 3 at a major LAN — a podium finish at any major LAN, as defined below.',
           'Won FNCS back to back — won two FNCS finals in a row, in any region.',
           'Played at an event — was in its field, whatever the result.',
         ],
@@ -493,7 +495,7 @@ export const GAMES: GameMeta[] = [
       'You have 4 lives, and every wrong group costs one.',
     ],
     rules: [
-      'A group is a country, a region, an organisation, a title — FNCS, LAN, major — or an earnings threshold. Nothing more obscure than that, and no birth years: nobody can tell a 2005 from a 2006.',
+      'A group is a country, a region, an organisation, a title — FNCS, major, major LAN — or an earnings threshold. Nothing more obscure than that, and no birth years: nobody can tell a 2005 from a 2006.',
       'Every connection fits exactly its own four. If the group is Poland, there is no fifth Pole on the board — so there is exactly one way to split the sixteen.',
       'A wrong guess tells you when three of your four belonged to one group, and says nothing otherwise.',
       'Nothing otherwise is deliberate: two of any four landing in the same group is close to chance on a sixteen-card board, so reporting it every time buried the one hint worth reading.',
@@ -553,7 +555,7 @@ export const GAMES: GameMeta[] = [
     tagline: 'Sort ten players into order, best at the top.',
     icon: '🔺',
     intro: [
-      'Ten players and one category — FNCS finals, titles, earnings, LANs or ten finishers at one tournament. Sort them into the pyramid with the best at the top, then check.',
+      'Ten players and one category — FNCS finals, titles, earnings, major LANs or ten finishers at one tournament. Sort them into the pyramid with the best at the top, then check.',
       'Every player in the right place turns green and locks. Red ones are in the wrong place.',
     ],
     rules: [
@@ -799,7 +801,7 @@ export const GAMES: GameMeta[] = [
       {
         title: 'Difficulty',
         items: [
-          'Easy 🟢 — the LANs and the Europe and North America finals, famous finishers.',
+          'Easy 🟢 — the major LANs and the Europe and North America finals, famous finishers.',
           'Medium 🟡 — Brazil too.',
           'Hard 🔴 — every region, anyone in the results.',
         ],
