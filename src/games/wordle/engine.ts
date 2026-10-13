@@ -42,6 +42,8 @@ export interface GameState {
   answer: string;
   /** The difficulty chosen for the round, or null for none (see `chosenLevel`). Sets the digit help. */
   level: Difficulty | null;
+  /** Every guess must be a player's name (`playerNames`) — a Choose option, never Random or the daily. */
+  namesOnly: boolean;
   guesses: string[];
   status: 'playing' | 'won' | 'lost';
 }
@@ -74,8 +76,30 @@ export function eligible(players: readonly RosterPlayer[]): RosterPlayer[] {
  * from a no-repeat rotation (`games/shared/rotation.ts`) and hands the result
  * here, so the choice of player and the rules of the round stay apart.
  */
-export function gameFor(secret: RosterPlayer, level: Difficulty | null = 'easy'): GameState {
-  return { secret, answer: normalizeName(secret.name), level, guesses: [], status: 'playing' };
+export function gameFor(secret: RosterPlayer, level: Difficulty | null = 'easy', namesOnly = false): GameState {
+  return { secret, answer: normalizeName(secret.name), level, namesOnly, guesses: [], status: 'playing' };
+}
+
+/**
+ * Every guess a "player names only" round accepts: each player's handle and
+ * the other names Liquipedia lists for them, reduced the way a guess is.
+ *
+ * The option the user asked for on 13 Oct 2026: no QWERTY or ASDFG to test
+ * letters, only real names, the way Wordle only takes real words. Harder, so it
+ * is behind Choose and never in Random or the daily. The whole roster counts,
+ * not just the answers: a handle too long or odd to be an answer (NATENAPLAYER)
+ * is still a name. Over a thousand at five or six characters; at eleven and
+ * twelve only a few dozen, which is the hard end of it.
+ */
+export function playerNames(players: readonly RosterPlayer[]): Set<string> {
+  const names = new Set<string>();
+  for (const player of players) {
+    for (const name of [player.name, ...player.aliases]) {
+      const key = normalizeName(name);
+      if (key) names.add(key);
+    }
+  }
+  return names;
 }
 
 export function createGame(
@@ -204,7 +228,8 @@ export type SubmitResult =
   | { ok: true; state: GameState }
   | { ok: false; reason: string };
 
-export function submitGuess(state: GameState, rawGuess: string): SubmitResult {
+/** `names` is the accepted list on a names-only round (`playerNames`); any string goes otherwise. */
+export function submitGuess(state: GameState, rawGuess: string, names?: ReadonlySet<string>): SubmitResult {
   if (state.status !== 'playing') return { ok: false, reason: 'This round is already over.' };
 
   const guess = normalizeName(rawGuess);
@@ -222,6 +247,11 @@ export function submitGuess(state: GameState, rawGuess: string): SubmitResult {
   }
   if (state.guesses.includes(guess)) {
     return { ok: false, reason: `You already tried ${guess}.` };
+  }
+  // Like Wordle's "not in word list": it costs no guess. Without a list nothing passes,
+  // so a round that forgot to pass one fails loudly rather than quietly allowing anything.
+  if (state.namesOnly && !names?.has(guess)) {
+    return { ok: false, reason: `${guess} is not a player’s name — only real names count in this mode.` };
   }
 
   const guesses = [...state.guesses, guess];

@@ -21,6 +21,7 @@ import { getGame } from '@/games/registry';
 import {
   CATEGORIES,
   SOCIAL_CATEGORIES,
+  answerLabel,
   correctAnswer,
   createGame,
   giveUp,
@@ -47,7 +48,7 @@ const meta = getGame('higher-lower')!;
 const LEVELS: LevelOption<Difficulty>[] = [
   { id: 'easy', label: '🟢 Easy', hint: 'Famous names far apart. Gets harder slowly.' },
   { id: 'medium', label: '🟡 Medium', hint: 'Famous names far apart. Gets harder sooner.' },
-  { id: 'hard', label: '🔴 Hard', hint: 'Gets harder much quicker, and adds an Equal button for ties.' },
+  { id: 'hard', label: '🔴 Hard', hint: 'Famous names far apart. Gets harder much quicker.' },
 ];
 
 function displayValue(player: Contender, category: Category): string {
@@ -60,12 +61,17 @@ function displayValue(player: Contender, category: Category): string {
   return playerMoney(player);
 }
 
+const BORN = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+
 /**
  * The fact shown under the revealed value: something true about the player
  * that is not the answer to the round they just played. Not the wins on an
  * FNCS Finals round, where a player's titles are a floor under their finals.
+ * On Age it is the birthday, which is what decides the round: two players on
+ * the same whole years are still one older than the other.
  */
 function secondaryFact(player: Contender, category: Category): string {
+  if (category === 'age' && player.birthDate) return `born ${BORN.format(new Date(player.birthDate))}`;
   return category === 'fncsWins' || category === 'fncsFinals' || category === 'placement' || SOCIAL_CATEGORIES.includes(category)
     ? playerMoney(player)
     : plural(player.fncsWins, 'FNCS win');
@@ -100,7 +106,9 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const hasResults = Object.keys(pool?.placements ?? {}).length > 0;
   // A follower category whose platform the server has nothing fresh for is not offered either.
   const offline = (id: Category) => (id === 'twitch' || id === 'youtube') && !socials?.has(id);
-  const category: Category = (picked === 'placement' && !hasResults) || offline(picked) ? 'earnings' : picked;
+  const hidden = (id: Category) => CATEGORIES.find((item) => item.id === id)?.hidden === true;
+  const category: Category =
+    (picked === 'placement' && !hasResults) || offline(picked) || hidden(picked) ? 'earnings' : picked;
   const [difficulty, setDifficulty] = useLocalState<Difficulty>('higher-lower:level', 'easy');
   const [game, setGame] = useState<GameState | null>(null);
 
@@ -217,7 +225,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
               <section className="card stack">
                 <div className="card__title">Category</div>
                 <OptionGrid>
-                  {CATEGORIES.filter((item) => (!item.eventOnly || pool) && !offline(item.id)).map((item) => {
+                  {CATEGORIES.filter((item) => !item.hidden && (!item.eventOnly || pool) && !offline(item.id)).map((item) => {
                     const waiting = item.id === 'placement' && !hasResults;
                     return (
                       <OptionCard
@@ -319,7 +327,7 @@ function Board({
           ) : (
             <Banner tone="danger" title={game.lastAnswer ? 'Run over' : 'Gave up'}>
               {game.challenger.name} was {displayValue(game.challenger, game.category)} — the answer was{' '}
-              <strong>{truth}</strong>. Final score: {game.score}.
+              <strong>{answerLabel(game.category, truth)}</strong>. Final score: {game.score}.
             </Banner>
           )}
           <button type="button" className="btn btn--primary btn--lg btn--block" onClick={onRestart}>
@@ -335,9 +343,9 @@ function Board({
               disabled={revealed}
               onClick={() => onAnswer('higher')}
             >
-              ▲ Higher
+              {game.category === 'age' ? '▲ Older' : '▲ Higher'}
             </button>
-            {hasEqualButton(game.difficulty) ? (
+            {hasEqualButton(game.category) ? (
               <button
                 type="button"
                 className="btn btn--lg hl-answer"
@@ -353,7 +361,7 @@ function Board({
               disabled={revealed}
               onClick={() => onAnswer('lower')}
             >
-              ▼ Lower
+              {game.category === 'age' ? '▼ Younger' : '▼ Lower'}
             </button>
           </div>
           <div className="row" style={{ justifyContent: 'center' }}>
@@ -362,17 +370,34 @@ function Board({
         </div>
       )}
 
-      <p className="tiny faint center">
-        {game.category === 'placement'
-          ? `Did ${game.challenger.name} place higher or lower than ${game.current.name}${eventLabel ? ` at ${eventLabel}` : ''}?`
-          : game.category === 'twitch' || game.category === 'youtube'
-            ? `Does ${game.challenger.name} have more or fewer ${categoryMeta.title.replace(/ ([FS])/, (m) => m.toLowerCase())} than ${game.current.name}?`
-            : `Is ${game.challenger.name}’s ${categoryMeta.title.toLowerCase()} higher or lower than ${game.current.name}’s?`}
-        {/* Only Hard is ever dealt a tie, so only Hard needs telling. */}
-        {hasEqualButton(game.difficulty) ? ' Or exactly equal — Hard deals ties.' : ''}
-      </p>
+      <p className="tiny faint center">{promptFor(game, eventLabel)}</p>
     </div>
   );
+}
+
+/**
+ * The question under the board, in each category's own words. Only FNCS Wins
+ * is ever dealt a tie, so only its question mentions one.
+ */
+function promptFor(game: GameState, eventLabel: string | null): string {
+  const hidden = game.challenger.name;
+  const shown = game.current.name;
+  switch (game.category) {
+    case 'age':
+      return `Is ${hidden} older or younger than ${shown}?`;
+    case 'earnings':
+      return `Are ${hidden}’s career earnings higher or lower than ${shown}’s?`;
+    case 'fncsWins':
+      return `Does ${hidden} have more or fewer FNCS wins than ${shown} — or the same number? Two players with none are level too.`;
+    case 'fncsFinals':
+      return `Has ${hidden} reached more or fewer FNCS grand finals than ${shown}?`;
+    case 'placement':
+      return `Did ${hidden} place higher or lower than ${shown}${eventLabel ? ` at ${eventLabel}` : ''}?`;
+    case 'twitch':
+      return `Does ${hidden} have more or fewer Twitch followers than ${shown}?`;
+    case 'youtube':
+      return `Does ${hidden} have more or fewer YouTube subscribers than ${shown}?`;
+  }
 }
 
 /**

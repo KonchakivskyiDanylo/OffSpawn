@@ -155,9 +155,11 @@ Two dials run every round of this endless game. **Who** can appear widens round 
 
 **The known player never changes places.** The revealed player slides across to become the known one, nobody is shown twice in a run, and one mistake ends it. Running out of players ends the run as a win ("cleared").
 
+**Three categories on offer** since 13 Oct 2026: Age, Career Earnings and FNCS Wins (the user: "much more interesting"). FNCS Finals and the Twitch and YouTube counts are hidden (`hidden` in `CATEGORIES`, `engine.ts`); their code and checks stay, and so does Placement for event mode.
+
 | Category | Who is eligible | Unit of the gap |
 | --- | --- | --- |
-| Age | a published birthday | whole years |
+| Age | a published birthday | years, to the day: Older or Younger by the birth dates, the birthday shown under each age |
 | Career Earnings | earnings on record above $0 | share of the bigger figure |
 | FNCS Wins | everyone, noughts included | titles |
 | FNCS Finals | at least one final (3,316 players) | whole finals |
@@ -198,7 +200,7 @@ Four rounds per step; the last step repeats forever.
 2. **In the band.** Keep those whose gap lands in the scheduled band. If nobody does, take one of the three nearest misses.
 3. **The answer comes first.** Higher and Lower are an even draw, with two exceptions:
    - **Edge of the roster.** On Age and Earnings, if one side is down to its last few players, the draw follows the players back towards the middle.
-   - **Equal on Hard.** Equal comes up about one round in five. When a direction is impossible (a shown 0 cannot go lower), Equal is an even draw against the other.
+   - **Equal on FNCS Wins.** The only category with an Equal button, on every level. Equal comes up about one round in five. When a direction is impossible (a shown 0 cannot go lower), Equal is an even draw against the other.
 4. **Look ahead.** Within that answer, prefer a player whose own round next time will still have two possible answers. It samples 24 candidates.
 5. **Event mode.** Prefer the region the run has shown least.
 
@@ -214,11 +216,13 @@ Why the answer comes first: the old random draw leaked it. On Hard FNCS Wins, 93
 
 ### Ties
 
-- **Easy and Medium** are never dealt two equal numbers.
-- **Hard** deals ties, and only Equal is right. Two players with no FNCS wins count as level and can come up in any round: the question "has this player ever won one?".
-- **Career earnings** are never dealt level.
+Since 13 Oct 2026 (the user: "equal only in fncs wins for all levels"):
 
-Known gap: on Easy and Medium a shown 0 in FNCS Wins is still a free Higher, because those levels have no Equal button. That is about 13–20% of FNCS rounds.
+- **FNCS Wins** deals ties on every level, and only Equal is right. Two players with no FNCS wins count as level and can come up in any round: the question "has this player ever won one?". About a quarter of FNCS rounds are ties, and a shown 0 goes up only about half the time, so it is no longer a free Higher on Easy and Medium.
+- **Age** is never level. It compares birth dates, not whole years, so of two 23-year-olds one is older, and the buttons read Older and Younger. Two players born on the same day (18 of the top 250 earners share a birthday with someone) are never dealt together.
+- **Career earnings** are never dealt level, and neither are Placement, FNCS Finals or the follower counts.
+
+Over 60 runs a level, the answer flips direction 51–61% of the time in every category (a coin is 50%).
 
 ## Fortnitedle
 
@@ -229,6 +233,7 @@ Wordle on a player's handle: six guesses, and every tile turns green (right plac
 - **Stripped.** Spaces and punctuation go, and case does not matter.
 - **Digits count.** They are characters and have keys of their own.
 - **Any string goes.** A guess must be the answer's length but need not be a real player.
+- **Or player names only** (13 Oct 2026, the user: harder, so "it shouldn't be in random"). A **Guesses** row under Choose, below Region and Difficulty: *Anything* or *Player names only*. With the second, every guess must be a player's handle or one of their Liquipedia aliases (`playerNames` in `wordle/engine.ts`: 6,315 names, 1,389 of six characters, 56 of twelve). A guess that is not one is refused, like Wordle's "not in word list", and costs nothing. Random, an event field and the daily always take anything. The pick is remembered (`wordle:names-only`), and a round played this way is recorded with setup mode `names-only`.
 - **Repeated letters score like Wordle.** Greens are taken first, then yellows from what is left, so a second copy of a letter the name has once is grey.
 
 **Who can be the answer:** 5,585 handles. After normalising, a handle must be 3–12 characters and use at least two different characters. Anything with a parenthesis is out, because "Nate (NA player)" would become the twelve-tile NATENAPLAYER.
@@ -808,7 +813,7 @@ From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** 
 
 **Boards and lists come back only when they change** (`src/daily/reuse.ts`). Each Tenite and List daily keeps a fingerprint of who its answers are (`sig`). A board is never a daily again while its top 10 is the same people; once a big event changes it ("Top 10 by career earnings" after a World Cup), it is a new puzzle and may come back, but not within 30 days (`CHANGED_REST`). Neighbouring days are kept apart too: no kind of board or list twice within 2 days (`KIND_GAP`), and no family — one board split by region or year, like "average FNCS finish — NA East" and "— NA West" — within 7 (`FAMILY_GAP`). Boards that count only players Liquipedia lists as active are never a daily, since its retired status is rarely updated.
 
-**A streak** is days in a row with that game's daily played, win or lose — a hard day does not break a month. Every streak is per game, on the home page too: each daily's card shows its own 🔥 (4 Oct 2026, the user: "if player played fortnitedle today, it will show on fortnitedle 1 day streak but not for other games"). A day caught up from the archive counts as played and in Won, but not towards a streak or best run (`late` in the log).
+**A streak** is days in a row with that game's daily played, win or lose — a hard day does not break a month. Every streak is per game, on the home page too: each daily's card shows its own 🔥 (4 Oct 2026, the user: "if player played fortnitedle today, it will show on fortnitedle 1 day streak but not for other games"). A day caught up from the archive counts as played and in Won, but not towards a streak or best run (`late` in the log). **Streaks live in the browser, per address**: `www.offspawn.app` and `offspawn.app` each keep their own. The one-address redirect of 13 Oct 2026 therefore started anyone who had played on `www.` from 0 (the user's own streak included; they chose to leave it: "it happens and won't affect overall game"). Data updates and deploys never touch it. What would reset everyone again: changing the site's address, the `chillfn:` storage prefix (`src/lib/storage.ts`), or a game's id.
 
 **Earlier puzzles** (the archive, 8 Oct 2026 — the user: "play previous days games, only if from this website nobody played before"). Every daily from #1 to yesterday can be played, **once per browser**:
 
@@ -885,7 +890,6 @@ My recommendation: commit this week's work and get the site live before the Glob
 
 ### Decisions only you can make
 
-- **The free Higher on Easy and Medium FNCS Wins.** A shown 0 is still a free Higher there, about 13–20% of rounds. Giving FNCS Wins an Equal button on every level would fix it.
 - **The Middle East in Higher or Lower pools.** Four players cannot fill five pools. Either one pool per category goes without, or one of them appears twice in a category.
 - **Thin Connections pools.** Most single-region pools and South America Easy/Medium cannot build a board. Accept that, or add rule kinds that work inside one region.
 - **Data with no source yet:** eliminations and damage, and who qualified from where. Each unlocks limited-mode categories if a source is found. (X followers need a paid API; Instagram and TikTok have none for this.)

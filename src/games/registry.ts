@@ -91,14 +91,14 @@ const POOL_SECTION: RuleSection = {
 export const GAMES: GameMeta[] = [
   {
     id: 'higher-lower',
-    socials: true,
+    // `socials: true` comes back with the Twitch and YouTube categories (hidden since 13 Oct 2026).
     slug: 'higher-lower',
     title: 'Higher or Lower',
     tagline: 'Is the next player above or below? Keep the streak alive.',
     seo: {
       title: 'Fortnite Higher or Lower: pro earnings, FNCS wins and age',
       description:
-        'Is the next competitive Fortnite player higher or lower? Compare pros on career earnings, FNCS wins, FNCS finals and age, and keep your streak alive.',
+        'Is the next competitive Fortnite player higher or lower? Compare pros on career earnings, FNCS wins and age, and keep your streak alive.',
     },
     icon: '📈',
     intro: [
@@ -109,31 +109,29 @@ export const GAMES: GameMeta[] = [
       {
         title: 'Categories',
         items: [
-          'Age — how old each player is today, from their published birthday.',
+          'Age — is the player older or younger? From their published birthday, to the day.',
           'Career Earnings — every dollar of tournament prize money on record.',
           'FNCS Wins — regional FNCS grand finals won, every season and region. Players with none come up too.',
-          'FNCS Finals — FNCS grand finals reached, the Globals and the other FNCS LANs included.',
-          'Twitch Followers, YouTube Subscribers — the counts each platform shows, updated every day. YouTube rounds its counts, like 1.23M.',
         ],
       },
       {
         title: 'Difficulty',
         items: [
           'A run starts with famous players far apart. The longer it lasts, the less known the players and the closer their numbers.',
-          'Easy gets harder slowly, Medium faster, Hard fastest. Hard also adds an Equal button.',
+          'Easy gets harder slowly, Medium faster, Hard fastest.',
         ],
       },
       {
         title: 'Ties',
         items: [
-          'Easy and Medium never show two players on the same number, so Higher or Lower is always right.',
-          'Hard can, and then only Equal is right — two players with no FNCS wins too.',
-          'Age is compared in whole years: two 19-year-olds are level even with birthdays months apart.',
+          'Only FNCS Wins has an Equal button, on every level. Two players on the same number of titles are level, and then only Equal is right — two players with none too.',
+          'Age is never level: it is compared by birthday, so of two 19-year-olds one is older. The birthday is shown under each age.',
           'Two players are never level on career earnings.',
         ],
       },
     ],
-    terms: ['earnings', 'age', 'fncs-title', 'fncs-final'],
+    // 'fncs-final' comes back with the FNCS Finals category (hidden since 13 Oct 2026).
+    terms: ['earnings', 'age', 'fncs-title'],
     Component: lazy(() => import('./higher-lower/HigherLowerGame')),
   },
   {
@@ -154,6 +152,7 @@ export const GAMES: GameMeta[] = [
       'Spaces and punctuation are removed, capitalisation does not matter.',
       'Digits 0–9 count as characters and are on the keyboard.',
       'Any combination of letters and digits is allowed — it does not have to be a real player.',
+      'Player names only, under Choose: every guess must then be a real player’s name, current or former. A guess that is not one is refused and costs nothing. Much harder — you cannot test letters freely.',
       'From your third guess, you are told if the name has a digit — not which one or where.',
       'Every player in the pool comes up once before any of them comes round again.',
     ],

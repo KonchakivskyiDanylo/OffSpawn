@@ -34,12 +34,21 @@ export type Contender = RosterPlayer & {
 export type { Difficulty };
 
 /**
- * Only Hard offers the Equal button — and once it is on the board, using it is
- * compulsory. Easy and Medium are never dealt a tie at all (see
- * `answersDealt`), and would accept either direction if one were.
+ * Only FNCS Wins has an Equal button, on every level — and once it is on the
+ * board, using it is compulsory: two players on the same count of titles, none
+ * included, are level (the user, 13 Oct 2026). Nothing else is ever dealt a tie
+ * (see `answersDealt`). Age is compared by birth date and earnings to the
+ * dollar, where level is a coincidence nobody could know, so both are always
+ * one way or the other; a tie would accept either direction if one were dealt.
  */
-export function hasEqualButton(difficulty: Difficulty): boolean {
-  return difficulty === 'hard';
+export function hasEqualButton(category: Category): boolean {
+  return category === 'fncsWins';
+}
+
+/** The answer as its button says it: Age asks older or younger. */
+export function answerLabel(category: Category, answer: Answer): string {
+  if (category === 'age' && answer !== 'equal') return answer === 'higher' ? 'older' : 'younger';
+  return answer;
 }
 
 export type Status = 'playing' | 'revealed' | 'gameover' | 'cleared';
@@ -52,10 +61,16 @@ export interface CategoryMeta {
   title: string;
   /** Only offered in event mode: it is a question about that event's results. */
   eventOnly?: boolean;
+  /**
+   * Not offered for now. FNCS Finals and the two follower counts (the user,
+   * 13 Oct 2026: focus on Age, Career Earnings and FNCS Wins, "much more
+   * interesting"). Their code and checks stay; drop the flag to bring one back.
+   */
+  hidden?: boolean;
 }
 
 export const CATEGORIES: CategoryMeta[] = [
-  { id: 'age', label: 'Age', hint: 'How old is the player today?', title: 'Age' },
+  { id: 'age', label: 'Age', hint: 'Older or younger? By birthday, to the day.', title: 'Age' },
   {
     id: 'earnings',
     label: 'Career Earnings',
@@ -73,6 +88,7 @@ export const CATEGORIES: CategoryMeta[] = [
     label: 'FNCS Finals',
     hint: 'FNCS grand finals reached — the regional finals, plus the Globals and the other FNCS LANs.',
     title: 'FNCS Finals',
+    hidden: true,
   },
   {
     id: 'placement',
@@ -86,17 +102,34 @@ export const CATEGORIES: CategoryMeta[] = [
     label: 'Twitch Followers',
     hint: 'Followers on their Twitch channel, as Twitch counts them today.',
     title: 'Twitch Followers',
+    hidden: true,
   },
   {
     id: 'youtube',
     label: 'YouTube Subscribers',
     hint: 'Subscribers to their YouTube channel, rounded the way YouTube shows them.',
     title: 'YouTube Subscribers',
+    hidden: true,
   },
 ];
 
+const YEAR_MS = 365.2425 * 24 * 60 * 60 * 1000;
+/** One fixed "today" per page, so two players born on the same day are exactly level. */
+const NOW = Date.now();
+
+/**
+ * Age to the day, in years: Older or Younger is decided by the birth dates, so
+ * two players a few months apart are not a tie (the user, 13 Oct 2026: "age is
+ * almost impossible to have the players from the same date"). The card still
+ * shows whole years, with the birthday under it.
+ */
+function exactAge(player: Contender): number {
+  const born = player.birthDate ? Date.parse(player.birthDate) : NaN;
+  return Number.isNaN(born) ? (player.age ?? 0) : (NOW - born) / YEAR_MS;
+}
+
 export function valueOf(player: Contender, category: Category): number {
-  if (category === 'age') return player.age ?? 0;
+  if (category === 'age') return exactAge(player);
   if (category === 'fncsWins') return player.fncsWins;
   if (category === 'fncsFinals') return player.fncsFinals ?? 0;
   // Places count down, so the place is negated: 1st is the highest value and
@@ -207,13 +240,14 @@ export function closenessFor(difficulty: Difficulty, round: number): Closeness {
  *
  * Earnings are relative — $40k against $50k and $2.0M against $2.5M are the
  * same question — so "obvious" is one player on at most half the other's
- * money. Age is in whole years and the FNCS counts in titles and finals, where
- * a relative gap would call nought-against-one the widest pair on the board.
+ * money. Age is in years, to the day, and the FNCS counts in titles and
+ * finals, where a relative gap would call nought-against-one the widest pair on
+ * the board.
  *
- * Very close on the whole-number categories is level or one apart. Only
- * Hard is dealt the level ones, and it must not be dealt nothing else: with
- * very close meaning ties alone, every FNCS round past the twelfth was a tie
- * and Hard became "press Equal forever" — 134 of 200 rounds in a test run.
+ * Very close on FNCS Wins is level or one apart, and it must not be level
+ * alone: with very close meaning ties only, every FNCS round past the twelfth
+ * was a tie and Hard became "press Equal forever" — 134 of 200 rounds in a test
+ * run.
  */
 const BANDS: Record<Category, Record<Closeness, [number, number]>> = {
   earnings: {
@@ -331,19 +365,15 @@ function answerBetween(hidden: RosterPlayer, shown: RosterPlayer, category: Cate
 }
 
 /**
- * The answers a level may be dealt.
+ * The answers a category may be dealt.
  *
- * Ties only where there is an Equal button: without one a tie accepts either
- * answer and is a free point rather than a question. And never on earnings,
- * where a tie is two careers level to the dollar — a coincidence of the
- * records that nobody could know. A tie on placement is two players who shared
- * a place, which in a duos event means one team: that one is worth knowing.
+ * Ties only where there is an Equal button, which is FNCS Wins alone: without
+ * one a tie accepts either answer and is a free point rather than a question.
+ * So two players born on the same day, two careers level to the dollar, two
+ * duo partners on one place and two channels YouTube rounds alike never meet.
  */
-function answersDealt(category: Category, difficulty: Difficulty): Answer[] {
-  // Nor on followers: YouTube rounds to three figures, so its "level" is often two different channels.
-  return hasEqualButton(difficulty) && category !== 'earnings' && !social(category)
-    ? ['higher', 'lower', 'equal']
-    : ['higher', 'lower'];
+function answersDealt(category: Category): Answer[] {
+  return hasEqualButton(category) ? ['higher', 'lower', 'equal'] : ['higher', 'lower'];
 }
 
 /**
@@ -366,7 +396,7 @@ function offers(
   difficulty: Difficulty,
   round: number,
 ): { by: Map<Answer, RosterPlayer[]>; inBand: boolean } | null {
-  const answers = answersDealt(category, difficulty);
+  const answers = answersDealt(category);
   const allowed = (player: RosterPlayer) =>
     !shown.has(player.id) && answers.includes(answerBetween(player, current, category));
 
@@ -637,7 +667,7 @@ export function correctAnswer(state: GameState): Answer {
 export function isCorrect(state: GameState, answer: Answer): boolean {
   const truth = correctAnswer(state);
   // Without an Equal button a tie has to accept either direction.
-  if (!hasEqualButton(state.difficulty) && truth === 'equal') {
+  if (!hasEqualButton(state.category) && truth === 'equal') {
     return answer === 'higher' || answer === 'lower';
   }
   return answer === truth;

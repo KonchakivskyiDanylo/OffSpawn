@@ -52,6 +52,7 @@ export function PoolSetup({
   onChange,
   eligible,
   extra,
+  customExtra,
   onStart,
   startLabel = 'Start',
   canStart = true,
@@ -66,6 +67,8 @@ export function PoolSetup({
   eligible?: Eligible;
   /** Game-specific choices (modes, categories) shown above Start. */
   extra?: ReactNode;
+  /** A game's own row inside Choose, under Difficulty — Fortnitedle's "Guesses". Hidden on Random. */
+  customExtra?: ReactNode;
   onStart: () => void;
   startLabel?: string;
   canStart?: boolean;
@@ -192,6 +195,8 @@ export function PoolSetup({
                   </OptionGrid>
                 </div>
               ) : null}
+
+              {customExtra}
             </div>
           ) : (
             <p className="small muted" style={{ margin: 0 }}>

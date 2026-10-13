@@ -255,7 +255,7 @@ function checkHigherLower(contenders: readonly hl.Contender[], category: hl.Cate
         const truth = hl.correctAnswer(state);
         if (truth === 'equal') ties++;
         check(
-          truth !== 'equal' || hl.hasEqualButton(difficulty),
+          truth !== 'equal' || hl.hasEqualButton(category),
           `higher-lower ${where}: dealt a tie with no Equal button`,
         );
         if (previous && previous !== 'equal' && truth !== 'equal') {
@@ -294,14 +294,16 @@ function checkHigherLower(contenders: readonly hl.Contender[], category: hl.Cate
       flipped < 0.75,
       `higher-lower ${tag}/${difficulty}: ${Math.round(flipped * 100)}% of answers flipped direction`,
     );
-    // On Hard a shown nought can be equal, and must sometimes be — it used to
-    // go up every time, because nought against nought was never dealt.
-    if (category === 'fncsWins' && difficulty === 'hard') {
-      check(fromNought > 0, 'higher-lower fncsWins/hard: no nought was ever shown');
+    // FNCS Wins has Equal on every level (13 Oct 2026), so a shown nought can be
+    // equal and must sometimes be — it used to go up every time on Easy and
+    // Medium, a free Higher in about one FNCS round in six.
+    if (category === 'fncsWins') {
+      check(fromNought > 0, `higher-lower fncsWins/${difficulty}: no nought was ever shown`);
       check(
         noughtUp < fromNought * 0.75,
-        `higher-lower fncsWins/hard: ${noughtUp} of ${fromNought} shown noughts went up`,
+        `higher-lower fncsWins/${difficulty}: ${noughtUp} of ${fromNought} shown noughts went up`,
       );
+      notes.push(`higher-lower fncsWins/${difficulty}: ${noughtUp} of ${fromNought} shown noughts went up`);
     }
     // FNCS Wins runs on small integers and a few hundred title-holders, so its
     // bands are often unreachable and the nearest miss stands in — measured,
@@ -329,6 +331,22 @@ for (const category of hlCategories) checkHigherLower(contenders, category);
     hl.eligible(placed, 'placement').length === 1 && placed[0].placement?.of === 3,
     'higher-lower placement: withPlacements attached the wrong finishes',
   );
+}
+
+// Age is Older or Younger by the birth dates, never a tie; Equal is FNCS Wins' alone.
+{
+  const [a, b] = roster.players.filter((p) => p.birthDate);
+  const older: hl.Contender = { ...a, birthDate: '2003-03-01', age: 23 };
+  const younger: hl.Contender = { ...b, birthDate: '2003-09-01', age: 23 };
+  check(hl.valueOf(older, 'age') > hl.valueOf(younger, 'age'), 'higher-lower age: two 23-year-olds are not split by their birthdays');
+  check(hl.valueOf(older, 'age') === hl.valueOf({ ...b, birthDate: '2003-03-01', age: 23 }, 'age'), 'higher-lower age: one birthday is not level with itself');
+  check(hl.answerLabel('age', 'higher') === 'older' && hl.answerLabel('age', 'lower') === 'younger', 'higher-lower age: the answers do not read older and younger');
+  check(
+    (['age', 'earnings', 'fncsFinals', 'placement', 'twitch', 'youtube'] as const).every((c) => !hl.hasEqualButton(c)) && hl.hasEqualButton('fncsWins'),
+    'higher-lower: Equal is offered somewhere other than FNCS Wins',
+  );
+  const offered = hl.CATEGORIES.filter((c) => !c.hidden && !c.eventOnly).map((c) => c.id);
+  check(offered.join() === 'age,earnings,fncsWins', `higher-lower: the categories on offer are ${offered.join(', ')}`);
 }
 
 // FNCS Wins must now include players on nought.
@@ -387,6 +405,27 @@ for (const category of hlCategories) checkHigherLower(contenders, category);
   const game = wordle.gameFor(pool[0]);
   const solved = wordle.submitGuess(game, pool[0].name);
   check(solved.ok && solved.state.status === 'won', 'fortnitedle: the exact answer did not win');
+
+  // Player names only (Choose, 13 Oct 2026): a made-up string is refused and
+  // costs no guess, a real name of the right length is taken, and every
+  // possible answer is itself a name. Off, anything the right length goes.
+  {
+    const names = wordle.playerNames(roster.players);
+    check(pool.every((p) => names.has(wordle.gameFor(p).answer)), 'fortnitedle: an answer is missing from the player names');
+    const secret = pool.find((p) => p.name.length >= 5 && /^[A-Za-z]+$/.test(p.name))!;
+    const strict = wordle.gameFor(secret, null, true);
+    const madeUp = 'QWERTYUIOPAS'.slice(0, strict.answer.length);
+    const real = [...names].find((name) => name.length === strict.answer.length && name !== strict.answer)!;
+    check(!names.has(madeUp), `fortnitedle: ${madeUp} is somebody's name, pick another test string`);
+    const refused = wordle.submitGuess(strict, madeUp, names);
+    check(!refused.ok, `fortnitedle: names-only took ${madeUp}`);
+    const taken = wordle.submitGuess(strict, real, names);
+    check(taken.ok && taken.state.guesses.length === 1, `fortnitedle: names-only refused the real name ${real}`);
+    check(wordle.submitGuess(strict, strict.answer, names).ok, 'fortnitedle: names-only refused the answer itself');
+    check(wordle.submitGuess(wordle.gameFor(secret), madeUp).ok, 'fortnitedle: a normal round refused a made-up guess');
+    const byLength = [3, 6, 9, 12].map((n) => `${n}: ${[...names].filter((name) => name.length === n).length}`);
+    notes.push(`fortnitedle names-only: ${names.size} names, by length ${byLength.join(', ')}`);
+  }
 
   // The digit help, three guesses into a round on a digit answer: every level,
   // Random (no level) and the daily say only that there is a digit — no digit

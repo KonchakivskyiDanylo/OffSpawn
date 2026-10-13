@@ -7,7 +7,7 @@ import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
 import { PoolSetup } from '@/components/PoolSetup';
 import { SecretCard } from '@/components/SecretCard';
 import { DailyEnd, DailyPending } from '@/components/DailyEnd';
-import { Banner } from '@/components/ui';
+import { Banner, OptionCard, OptionGrid } from '@/components/ui';
 import { useDailyRound, usePlayMode } from '@/daily/useDailyRound';
 import { restoreDaily, result as dailyResult, shareGrid, snapshot } from './daily';
 import { rotationKey } from '@/games/shared/rotation';
@@ -18,7 +18,7 @@ import { type Roster } from '@/data/liquipedia/roster';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { plural } from '@/lib/format';
-import { readLocal, writeLocal } from '@/lib/storage';
+import { readLocal, useLocalState, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
   digitAnnounced,
@@ -30,6 +30,7 @@ import {
   hasDigits,
   keyboardState,
   MAX_GUESSES,
+  playerNames,
   revealedDigits,
   revealSchedule,
   scoreGuess,
@@ -151,7 +152,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   useRoundRecorder('wordle', dailyOn ? daily.endedHere : game !== null && game.status !== 'playing', () => ({
     title: `Fortnitedle — ${game!.secret.name}`,
     data: EXPORT_DATE,
-    setup: dailyOn ? { daily: daily.day } : poolSetup(event, choice),
+    setup: dailyOn ? { daily: daily.day } : poolSetup(event, choice, game!.namesOnly ? 'names-only' : undefined),
     ...roundRecord(game!),
   }));
   const shell = {
@@ -164,6 +165,15 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const [message, setMessage] = useState<string | null>(null);
   /** Set when a round opened a fresh cycle, so the board can say so. */
   const [wrapped, setWrapped] = useState(false);
+
+  /**
+   * Guesses: anything the right length, or player names only. A Choose option
+   * (the user, 13 Oct 2026), so Random, an event field and the daily always take
+   * anything; the pick is remembered for the next time Choose is on.
+   */
+  const [namesOnlyPick, setNamesOnly] = useLocalState<boolean>('wordle:names-only', false);
+  const namesOnly = choice.mode === 'custom' && !pools?.get(event) && namesOnlyPick;
+  const names = useMemo(() => playerNames(roster.players), [roster]);
 
   // A handle only works as an answer at a playable length, so eligibility has
   // to be part of choosing the pool, not a filter applied after it.
@@ -184,15 +194,15 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     const drawn = dealSecret(players, readLocal<string[]>(key, []), pools, event, choice);
     if (drawn) writeLocal(key, drawn.seen);
     if (drawn) sendStart('wordle', false);
-    setPractice(drawn ? gameFor(drawn.pick, chosenLevel(event, choice)) : null);
+    setPractice(drawn ? gameFor(drawn.pick, chosenLevel(event, choice), namesOnly) : null);
     setWrapped(drawn?.wrapped ?? false);
     setDraft('');
     setMessage(null);
-  }, [players, pools, event, choice]);
+  }, [players, pools, event, choice, namesOnly]);
 
   const commit = useCallback(() => {
     if (!game || game.status !== 'playing') return;
-    const result = submitGuess(game, draft);
+    const result = submitGuess(game, draft, names);
     if (!result.ok) {
       setMessage(result.reason);
       return;
@@ -200,7 +210,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
     setMessage(null);
     setDraft('');
     setGame(result.state);
-  }, [game, draft, setGame]);
+  }, [game, draft, names, setGame]);
 
   const press = useCallback(
     (key: string) => {
@@ -263,6 +273,33 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
             value={choice}
             onChange={setChoice}
             eligible={eligible}
+            customExtra={
+              <div className="stack-sm">
+                <div className="field-label">Guesses</div>
+                <OptionGrid>
+                  <OptionCard
+                    label={
+                      <>
+                        <span aria-hidden="true">🔤</span> Anything
+                      </>
+                    }
+                    hint="Any letters the right length, so you can test letters freely."
+                    selected={!namesOnlyPick}
+                    onClick={() => setNamesOnly(false)}
+                  />
+                  <OptionCard
+                    label={
+                      <>
+                        <span aria-hidden="true">👤</span> Player names only
+                      </>
+                    }
+                    hint="Every guess must be a real player’s name. Much harder."
+                    selected={namesOnlyPick}
+                    onClick={() => setNamesOnly(true)}
+                  />
+                </OptionGrid>
+              </div>
+            }
             onStart={newGame}
             canStart={players.length > 0}
           />
@@ -342,6 +379,12 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
         ) : null}
 
         {!finished && digitAnnounced(game) ? <DigitNotice justNow={game.guesses.length === FIRST_REVEAL} /> : null}
+
+        {!finished && game.namesOnly ? (
+          <p className="tiny faint center" style={{ margin: 0 }}>
+            👤 Player names only — every guess must be a real player’s name.
+          </p>
+        ) : null}
 
         {message ? <p className="center small" style={{ color: 'var(--warning)' }}>{message}</p> : null}
 
