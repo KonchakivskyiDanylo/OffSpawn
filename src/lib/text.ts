@@ -204,6 +204,21 @@ export function ambiguousNames(players: readonly Nameable[]): Set<string> {
   return out;
 }
 
+/**
+ * A handle as a rule names it: "Chap", or "Chap (Poland)" when another player
+ * in `ambiguous` (from `ambiguousNames`) answers to it too. Three players are
+ * called Chap, and "10+ events with Chap" did not say which (the user, 14 Oct
+ * 2026: "it should be specified which exactly").
+ */
+export function namedPlayer(
+  player: { id: string; name: string; countryName?: string | null },
+  ambiguous: ReadonlySet<string>,
+): string {
+  if (!ambiguous.has(normalizeName(player.name))) return player.name;
+  const where = player.countryName ?? disambiguator(player.id);
+  return where ? `${player.name} (${where})` : player.name;
+}
+
 /** Deterministic avatar colour from a player id. */
 export function avatarColors(id: string): [string, string] {
   let hash = 0;

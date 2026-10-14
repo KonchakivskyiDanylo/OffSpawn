@@ -52,6 +52,12 @@ export interface DailyRound<S> {
   past: boolean;
   played: DailyResult | null;
   /**
+   * With `played`: the day's puzzle as it starts, so the page can show its
+   * answers beside the result — which ones this browser found went with the
+   * board it no longer keeps. Null otherwise, or when the data cannot rebuild it.
+   */
+  answers: S | null;
+  /**
    * True once the round has ended while this page was open. A round that was
    * already over when the page loaded was recorded the first time, so the
    * analytics recorder waits on this rather than on the round being over.
@@ -79,7 +85,12 @@ export function useDailyRound<G extends DailyGame, S, Snap>(
 ): DailyRound<S> {
   const { day, past } = usePuzzleDay();
   const { set, error } = useDailySet(options.on ? day : null);
-  const [round, setRound] = useState<{ day: string; state: S | null; played: DailyResult | null } | null>(null);
+  const [round, setRound] = useState<{
+    day: string;
+    state: S | null;
+    played: DailyResult | null;
+    answers?: S | null;
+  } | null>(null);
   const [endedHere, setEndedHere] = useState(false);
   const latest = useRef(options);
   latest.current = options;
@@ -91,7 +102,8 @@ export function useDailyRound<G extends DailyGame, S, Snap>(
     // Finished here before, its board since let go: the result, never a fresh start.
     const played = saved === null ? (readLog(game)[day] ?? null) : null;
     const restored = puzzle && !played ? latest.current.restore(puzzle, saved) : null;
-    setRound({ day, state: restored, played });
+    const answers = puzzle && played ? latest.current.restore(puzzle, null) : null;
+    setRound({ day, state: restored, played, answers });
     setEndedHere(false);
   }, [options.on, options.ready, set, puzzle, game, day]);
 
@@ -134,6 +146,7 @@ export function useDailyRound<G extends DailyGame, S, Snap>(
     number: puzzleNumber(day),
     past,
     played: current?.played ?? null,
+    answers: current?.answers ?? null,
     endedHere,
   };
 }

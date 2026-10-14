@@ -1,4 +1,6 @@
 import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
+import type { Facts } from '@/data/liquipedia/facts';
+import type { Majors } from '@/data/liquipedia/majors';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import type { Teammates } from '@/data/liquipedia/teammates';
@@ -10,12 +12,23 @@ import type { Teammates } from '@/data/liquipedia/teammates';
  *
  * The roadmap (2 Oct 2026) says V1's real job is to find out how similarity
  * should work, so the measure is a weighted sum of separate parts, each 0 to
- * 1, and the weights are an argument. The game plays on `DEFAULT_WEIGHTS` —
- * the four the roadmap starts with — and the lab on the page (dev builds only)
- * changes them live, along with the parts that are off by default.
+ * 1, and the weights are an argument. The game plays on `DEFAULT_WEIGHTS`, and
+ * the lab on the page (dev builds only) changes them live.
  */
 
-export type AttributeId = 'teammates' | 'country' | 'age' | 'region' | 'linked' | 'era' | 'earnings' | 'orgs' | 'fncs';
+export type AttributeId =
+  | 'teammates'
+  | 'titles'
+  | 'stage'
+  | 'country'
+  | 'age'
+  | 'region'
+  | 'linked'
+  | 'era'
+  | 'lobbies'
+  | 'earnings'
+  | 'orgs'
+  | 'fncs';
 
 export interface Attribute {
   id: AttributeId;
@@ -26,11 +39,14 @@ export interface Attribute {
 
 export const ATTRIBUTES: Attribute[] = [
   { id: 'teammates', label: 'Played together', hint: 'Tournaments entered as teammates, on a log scale: 40 or more is a full match.' },
-  { id: 'country', label: 'Country', hint: 'Same first nationality.' },
+  { id: 'titles', label: 'FNCS wins together', hint: 'Regional FNCS finals won on the same team: one scores 0.7, two or more a full match.' },
+  { id: 'stage', label: 'Big events together', hint: 'Teammates at the World Cup, a Global Championship or another major LAN: once scores 0.7; twice, or a podium, a full match.' },
+  { id: 'country', label: 'Country', hint: 'Same first nationality; a neighbouring scene (the Nordics, Benelux, the Baltics…) scores half.' },
   { id: 'age', label: 'Age', hint: 'Birth dates two years apart score a third; unknown scores 0.3.' },
   { id: 'region', label: 'Region', hint: 'Same competitive region.' },
   { id: 'linked', label: 'Shared teammates', hint: 'Overlap between the two players’ top-50 teammate lists.' },
   { id: 'era', label: 'Same years', hint: 'Overlap between the years each earned prize money.' },
+  { id: 'lobbies', label: 'Same tournaments', hint: 'FNCS grand finals and LANs both played, out of the shorter career (counted as at least 10).' },
   { id: 'earnings', label: 'Career earnings', hint: 'A tenfold gap in career earnings scores half.' },
   { id: 'orgs', label: 'Same organisations', hint: 'Organisations both have played for; two in common is a full match.' },
   { id: 'fncs', label: 'FNCS wins', hint: 'Five titles apart scores 0.' },
@@ -38,23 +54,47 @@ export const ATTRIBUTES: Attribute[] = [
 
 export type Weights = Record<AttributeId, number>;
 
-/** The roadmap's four: age, country, region and matches played together. */
+/**
+ * The user's own mix from the lab (14 Oct 2026: played together 5, country 2,
+ * age 1.5, region 1, shared teammates 1, same years 2, same organisations 2 —
+ * "Something like that"), plus the three parts asked for the same day.
+ *
+ * FNCS wins together and big events together are rare and nearly always
+ * right — "if they win together it should be a really big clue" — so they are
+ * heavy: one title or one Globals as a duo is worth what seven tournaments
+ * together are, two what twenty are. At 4, measured over the Easy secrets,
+ * 99% of FNCS-winning partners and 95% of big-event partners rank in the top
+ * 10 (97% and 92% at 3); 5 changed little. Same tournaments is shared by
+ * most of a region's regulars, so it is light: at 1.5 a regular of the
+ * secret's finals who never teamed with them moves from about #180 to #70 and
+ * stays out of the top 25 nine times in ten; at 3 it was one in six.
+ */
 export const DEFAULT_WEIGHTS: Weights = {
-  teammates: 4,
+  teammates: 5,
+  titles: 4,
+  stage: 4,
   country: 2,
   age: 1.5,
   region: 1,
-  linked: 0,
-  era: 0,
+  linked: 1,
+  era: 2,
+  lobbies: 1.5,
   earnings: 0,
-  orgs: 0,
+  orgs: 2,
   fncs: 0,
 };
 
-/** What the parts read besides the roster row. Orgs is optional: without it that part is 0. */
+/**
+ * What the parts read besides the roster row. Orgs, facts and majors are
+ * optional: without one, the parts it feeds score 0 for everyone.
+ */
 export interface Context {
   teammates: Teammates;
   orgs: Orgs | null;
+  /** FNCS titles and which events were big. */
+  facts: Facts | null;
+  /** Who played which grand final and LAN, and with whom. */
+  majors: Majors | null;
 }
 
 export type Parts = Record<AttributeId, number>;
@@ -77,14 +117,131 @@ function jaccard<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): number {
   return shared / (a.size + b.size - shared);
 }
 
+// ------------------------------------------------------------- country --
+
+/**
+ * Scenes: countries whose players grow up in each other's lobbies, teams and
+ * languages. Hand-made and kept disjoint so it stays readable.
+ *
+ * All-or-nothing country was unkind to small countries (the user, 14 Oct
+ * 2026: "in eu, especially in countries with a small amount of players there
+ * could be a problem, maybe something by closer"): a Latvian secret has three
+ * compatriots, so country said nothing about anyone else, Lithuanians and
+ * Estonians included.
+ *
+ * There is no third, same-continent step on purpose: `region` is already that
+ * — Liquipedia reads it off nationality (Mexico is North America, Turkey and
+ * South Africa the Middle East), so a continent score would only count region
+ * twice. Countries in no scene — France, Brazil, Japan, South Korea, Turkey,
+ * Israel, Iran — are big enough or apart enough to stand alone.
+ */
+const SCENES: readonly (readonly string[])[] = [
+  ['GB', 'IE'], // UK & Ireland
+  ['DK', 'FI', 'GL', 'IS', 'NO', 'SE'], // Nordics
+  ['AT', 'CH', 'DE'], // DACH
+  ['BE', 'LU', 'NL'], // Benelux
+  ['AD', 'ES', 'PT'], // Iberia
+  ['IT', 'MT'], // Italy & Malta
+  ['EE', 'LT', 'LV'], // Baltics
+  ['CZ', 'HU', 'PL', 'SK'], // Central Europe
+  ['AL', 'BA', 'BG', 'GR', 'HR', 'ME', 'MK', 'RO', 'RS', 'SI', 'XK'], // Balkans
+  ['AM', 'AZ', 'BY', 'GE', 'KZ', 'MD', 'RU', 'UA'], // Eastern Europe & CIS
+  ['CA', 'US'], // US & Canada
+  // Spanish-speaking America and the Caribbean. Brazil, a scene of its own,
+  // shares their lobbies — `lobbies` and `region` see that — not their language.
+  ['AR', 'BO', 'CL', 'CO', 'CR', 'CU', 'DM', 'DO', 'EC', 'GT', 'HN', 'JM', 'KY', 'MQ', 'MX', 'NI', 'PA', 'PE', 'PR', 'PY', 'SV', 'TT', 'UY', 'VE'],
+  ['AE', 'BH', 'KW', 'OM', 'QA', 'SA', 'YE'], // Gulf
+  ['DZ', 'EG', 'IQ', 'JO', 'LB', 'MA', 'PS', 'SY', 'TN'], // Levant, Iraq & North Africa
+  ['AU', 'CK', 'FJ', 'NZ'], // Oceania
+  ['CN', 'HK', 'TW'], // Greater China
+  ['ID', 'KH', 'MY', 'PH', 'SG', 'TH', 'VN'], // Southeast Asia
+  ['IN', 'LK', 'PK'], // South Asia
+  ['CV', 'GN', 'KE', 'NA', 'NG', 'UG', 'ZA'], // Sub-Saharan Africa
+];
+
+const SCENE_OF = new Map(SCENES.flatMap((countries, scene) => countries.map((code) => [code, scene] as const)));
+
+/** What a neighbouring scene scores; the same country is 1. */
+const SAME_SCENE = 0.5;
+
+/** 1 for the same country, `SAME_SCENE` for a neighbour in the same scene, else 0. */
+export function countryCloseness(a: string | null, b: string | null): number {
+  if (a === null || b === null) return 0;
+  if (a === b) return 1;
+  const scene = SCENE_OF.get(a);
+  return scene !== undefined && scene === SCENE_OF.get(b) ? SAME_SCENE : 0;
+}
+
+// -------------------------------------------------------- events together --
+
+/** Players per team by format. A place shared by more is a tie between teams. */
+const TEAM_SIZE: Record<string, number> = { Duo: 2, Trio: 3, Squad: 4 };
+
+/**
+ * Who shared the secret's team at each big event, and how many times.
+ *
+ * Big is `Facts.headlineEvents` — the World Cup, the Global Championships, the
+ * 2022 Invitational, the Summit, the Reload Elite final: the LANs a duo is
+ * remembered by (the user, 14 Oct 2026: "if the players played together world
+ * cup it should give them a lot of points, because it's probably the teammate
+ * you think first of all"). A team is everyone who finished in the same place
+ * (`Majors.finishers`), so a place two teams tied for is skipped rather than
+ * read as one team of four.
+ *
+ * A podium together counts twice, because the result is what the duo is
+ * remembered by: Aqua and Nyhrox won the 2019 World Cup and that was their
+ * only LAN together. Counted once, Nyhrox was #4 for Aqua, behind two of
+ * Aqua's FNCS-title partners; twice, #3, and nothing else measured moved.
+ */
+function stageMates(playerId: string, context: Context): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!context.facts || !context.majors) return out;
+  const big = new Set(context.facts.headlineEvents.map((event) => event.name));
+  for (const result of context.majors.resultsFor(playerId)) {
+    if (!big.has(result.tournament.name)) continue;
+    const team = context.majors.finishers(result);
+    if (team.size > (TEAM_SIZE[result.tournament.mode ?? ''] ?? 1)) continue;
+    const times = result.placement <= 3 ? 2 : 1;
+    for (const id of team) if (id !== playerId) out.set(id, (out.get(id) ?? 0) + times);
+  }
+  return out;
+}
+
+/** Once together is already a strong clue; twice is as strong as it gets. */
+function onceOrTwice(times: number): number {
+  return times >= 2 ? 1 : times === 1 ? 0.7 : 0;
+}
+
+/**
+ * The shortest career `lobbies` divides by.
+ *
+ * Same tournaments counts the grand finals and LANs both players reached
+ * (`Majors`: every region's FNCS final and every major LAN — the lobbies the
+ * user means by "some eu player plays fncs and I name another player from eu,
+ * they could have played in the same lobby a lot", 14 Oct 2026). Shared ÷ the
+ * shorter of the two careers, because a player with eight finals cannot share
+ * more than eight, and having shared all of them is as alike as two careers
+ * get. Divided by at least this many, so "a lot" stays a count: two players
+ * whose only final was the same one score 0.1, not a perfect match, and ten
+ * shared finals is the least a full match takes — about three years of one
+ * region's finals, where an Easy secret's median career is 15. Measured, 10
+ * lifted the secret's lobby regulars more than 5 or 15 did: at 5, short
+ * careers sharing their few finals crowd them out.
+ */
+const LOBBY_FLOOR = 10;
+
 /** Everything about the secret the parts compare against, worked out once per ranking. */
 function profile(player: RosterPlayer, context: Context, orgsOf: (id: string) => ReadonlySet<string>) {
+  const events = new Set((context.majors?.resultsFor(player.id) ?? []).map((result) => result.tournament.name));
   return {
     player,
     born: player.birthDate ? Date.parse(player.birthDate) : NaN,
     mates: new Map(context.teammates.matesOf(player.id)),
     mateIds: new Set(context.teammates.matesOf(player.id).map(([id]) => id)),
+    titles: context.facts?.fncsTitlesWith(player.id) ?? new Map<string, number>(),
+    stage: stageMates(player.id, context),
     years: new Set(Object.keys(player.earningsByYear)),
+    events,
     orgs: orgsOf(player.id),
   };
 }
@@ -151,13 +308,18 @@ function compare(
   const theirMates = new Set(context.teammates.matesOf(player.id).map(([id]) => id));
   const earningsGap = Math.abs(Math.log10(player.earnings + 1) - Math.log10(target.player.earnings + 1));
   const sharedOrgs = [...orgsOf(player.id)].filter((org) => target.orgs.has(org)).length;
+  const theirEvents = context.majors?.resultsFor(player.id) ?? [];
+  const sharedEvents = theirEvents.filter((result) => target.events.has(result.tournament.name)).length;
   return {
     teammates: Math.min(1, Math.log1p(together) / Math.log1p(40)),
-    country: player.country !== null && player.country === target.player.country ? 1 : 0,
+    titles: onceOrTwice(target.titles.get(player.id) ?? 0),
+    stage: onceOrTwice(target.stage.get(player.id) ?? 0),
+    country: countryCloseness(target.player.country, player.country),
     age,
     region: player.region !== null && player.region === target.player.region ? 1 : 0,
     linked: Math.min(1, jaccard(target.mateIds, theirMates) * 3),
     era: jaccard(target.years, new Set(Object.keys(player.earningsByYear))),
+    lobbies: sharedEvents / Math.max(LOBBY_FLOOR, Math.min(target.events.size, theirEvents.length)),
     earnings: Math.max(0, 1 - earningsGap / 2),
     orgs: Math.min(1, sharedOrgs / 2),
     fncs: Math.max(0, 1 - Math.abs(player.fncsWins - target.player.fncsWins) / 5),

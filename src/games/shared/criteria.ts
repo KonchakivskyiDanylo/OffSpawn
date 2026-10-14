@@ -3,6 +3,7 @@ import type { Orgs } from '@/data/liquipedia/orgs';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { countShort, PLATFORM_META, type Socials } from '@/data/socials';
 import { moneyShort } from '@/lib/format';
+import { ambiguousNames, namedPlayer } from '@/lib/text';
 
 /**
  * Reusable player predicates.
@@ -39,11 +40,21 @@ export type CriterionKind =
   | 'won-fncs-year'
   | 'played-event'
   | 'age'
+  // Added for Box Fight on 14 Oct 2026; Connections' and Griefer's whitelists leave them out.
+  | 'fncs-format'
+  | 'fncs-years'
+  | 'young-winner'
+  | 'world-cup'
+  | 'globals-played'
+  // Hard Box Fight only (`deep`).
+  | 'div-cup'
+  | 'fpe'
+  | 'year-earnings'
+  | 'fncs-every'
   // Bingo's own (games/bingo/engine.ts); no other game builds these.
   | 'fncs-finals'
   | 'org-count'
   | 'fncs-regions'
-  | 'world-cup'
   | 'fncs-partners'
   | 'played-with'
   // Followers: built only when the server has fresh counts (`data/socials.ts`).
@@ -58,6 +69,8 @@ export interface PlayerCriterion {
   short: string;
   test: (player: RosterPlayer) => boolean;
   matches: RosterPlayer[];
+  /** Built only with `CriteriaOptions.deep`: what the scene's regulars know, not what the famous names' fans do. */
+  deep?: true;
 }
 
 export interface CriteriaSource {
@@ -70,6 +83,12 @@ export interface CriteriaSource {
    * follower rules are simply not built — the rest of the board is unchanged.
    */
   socials?: Socials | null;
+  /**
+   * Everyone a guess may name, when that is wider than `players` — Tic Tac
+   * Toe builds over a fame band and takes the whole roster. A handle two of
+   * them share is named with the country ("Chap (Poland)").
+   */
+  everyone?: readonly RosterPlayer[];
 }
 
 /** The follower lines a rule can draw: "100K+ Twitch followers", "1M+ YouTube subscribers". */
@@ -91,6 +110,12 @@ export interface CriteriaOptions {
    * Liquipedia page and $102k in career prize money is not a quiz question.
    */
   maxOrgs?: number;
+  /**
+   * Also build the deep rules — Div Cups, Performance Evaluations, a year's
+   * prize money — which only Box Fight's Hard boards ask (the user, 14 Oct
+   * 2026: "categories like won a div cup isn't easy, so they could be only in hard").
+   */
+  deep?: boolean;
 }
 
 /**
@@ -114,10 +139,10 @@ const REGION_SHORT: Record<string, string> = {
 };
 
 export function buildCriteria(
-  { players, facts, orgs, socials }: CriteriaSource,
+  { players, facts, orgs, socials, everyone }: CriteriaSource,
   options: CriteriaOptions = {},
 ): PlayerCriterion[] {
-  const { minMatches = 4, maxShare = 0.5, maxOrgs = 10 } = options;
+  const { minMatches = 4, maxShare = 0.5, maxOrgs = 10, deep = false } = options;
   const out: PlayerCriterion[] = [];
 
   const add = (
@@ -132,6 +157,12 @@ export function buildCriteria(
     if (matches.length < least) return;
     if (matches.length > players.length * maxShare) return;
     out.push({ id, kind, label, short, test, matches });
+  };
+  const addDeep = (id: string, kind: CriterionKind, label: string, short: string, test: (player: RosterPlayer) => boolean) => {
+    if (!deep) return;
+    const before = out.length;
+    add(id, kind, label, short, test);
+    if (out.length > before) out[out.length - 1].deep = true;
   };
 
   // ------------------------------------------------------------ identity --
@@ -226,15 +257,17 @@ export function buildCriteria(
    * never about someone you would have to look up. This used to be the eight
    * biggest earners only, which put the same eight names on every board.
    */
+  const ambiguous = ambiguousNames(everyone ?? players);
   for (const anchor of players) {
     if (anchor.tier !== 'easy') continue;
     const partners = facts.fncsPartners(anchor.id);
     if (partners.size < MIN_PARTNERS) continue;
+    const name = namedPlayer(anchor, ambiguous);
     add(
       `fncs-with:${anchor.id}`,
       'fncs-with',
-      `has won an FNCS with ${anchor.name}`,
-      `Won FNCS with ${anchor.name}`,
+      `has won an FNCS with ${name}`,
+      `Won FNCS with ${name}`,
       (p) => partners.has(p.id),
       MIN_PARTNERS,
     );
@@ -291,6 +324,68 @@ export function buildCriteria(
       (p) => facts.of(p.id).fncsWinYears.includes(year),
     );
   }
+
+  // ------------------------------------------ added 14 Oct 2026, for Box Fight --
+  // The user's picks from the measured list: the format won in, titles across
+  // years, a young champion, the World Cup, Globals played. Regional finals
+  // only, as everywhere an FNCS win is counted.
+  const fncsWon = (p: RosterPlayer) =>
+    facts.of(p.id).won.map((index) => facts.events[index]).filter((event) => event?.kind === 'fncs' && !event.lan);
+  for (const [mode, word] of [['Solo', 'solo'], ['Duo', 'duo'], ['Trio', 'trio'], ['Squad', 'squad']] as const) {
+    add(`won-fncs-mode:${mode}`, 'fncs-format', `has won a ${word} FNCS`, `Won a ${mode} FNCS`, (p) =>
+      fncsWon(p).some((event) => event.mode === mode),
+    );
+  }
+  add('fncs-years:3', 'fncs-years', 'has won FNCS in 3+ different years', 'Won FNCS in 3+ years', (p) =>
+    new Set(facts.of(p.id).fncsWinYears).size >= 3,
+  );
+  // Age on the day of the final, from the published birthday.
+  const youngest = (p: RosterPlayer) => {
+    if (!p.birthDate) return Infinity;
+    const born = Date.parse(p.birthDate);
+    const ages = facts.of(p.id).fncsWinDates.map((day) => (Date.parse(day) - born) / (365.2425 * 86_400_000));
+    return ages.length ? Math.min(...ages) : Infinity;
+  };
+  for (const age of [15, 16]) {
+    add(`young-winner:${age}`, 'young-winner', `won an FNCS before turning ${age}`, `FNCS winner before ${age}`, (p) =>
+      youngest(p) < age,
+    );
+  }
+  const worldCup = facts.events.filter((event) => event.name.startsWith('Fortnite World Cup'));
+  add('world-cup', 'world-cup', 'played at the 2019 World Cup', 'Played the World Cup', (p) =>
+    worldCup.some((event) => facts.playedAt(event.index).has(p.id)),
+  );
+  const globalsPlayed = (p: RosterPlayer) =>
+    facts.of(p.id).played.filter((index) => facts.events[index]?.kind === 'global').length;
+  add('globals-played:3', 'globals-played', 'has played 3+ Global Championships', 'Played 3+ Globals', (p) => globalsPlayed(p) >= 3);
+
+  // Deep: Hard boards only.
+  addDeep('globals-played:2', 'globals-played', 'has played 2+ Global Championships', 'Played 2+ Globals', (p) => globalsPlayed(p) >= 2);
+  const listed = (id: string) => new Set(facts.lists.find((list) => list.id === id)?.players ?? []);
+  const divCupRegions = facts.lists.flatMap((list) => /^divcup-won:([^:]+)$/.exec(list.id)?.[1] ?? []);
+  const anyDivCup = new Set(divCupRegions.flatMap((region) => [...listed(`divcup-won:${region}`)]));
+  addDeep('divcup-won', 'div-cup', 'has won a Div Cup', 'Won a Div Cup', (p) => anyDivCup.has(p.id));
+  for (const region of divCupRegions) {
+    const ids = listed(`divcup-won:${region}`);
+    const short = region === 'Europe' ? 'EU' : region;
+    addDeep(`divcup-won:${region}`, 'div-cup', `has won a ${short} Div Cup`, `Won ${short} Div Cup`, (p) => ids.has(p.id));
+  }
+  const fiveDivCups = listed('divcup-wins:5');
+  addDeep('divcup-wins:5', 'div-cup', 'has won 5+ Div Cups', '5+ Div Cup wins', (p) => fiveDivCups.has(p.id));
+  const evaluations = listed('fpe-sessions:40');
+  addDeep('fpe-sessions:40', 'fpe', 'has played 40+ Performance Evaluations', '40+ Perf. Evaluations', (p) => evaluations.has(p.id));
+  for (const [year, line] of [[2025, 100_000], [2026, 50_000]] as const) {
+    addDeep(`earned:${year}:${line}`, 'year-earnings', `earned ${moneyShort(line)}+ in ${year}`, `${moneyShort(line)}+ in ${year}`, (p) =>
+      (p.earningsByYear[year] ?? 0) >= line,
+    );
+  }
+  addDeep('earned-year:500000', 'year-earnings', 'earned $500K+ in a single year', '$500K+ in one year', (p) =>
+    Object.values(p.earningsByYear).some((amount) => amount >= 500_000),
+  );
+  const every2025 = new Set(facts.lists.filter((list) => list.id.startsWith('fncs-every:2025')).flatMap((list) => list.players));
+  addDeep('fncs-every:2025', 'fncs-every', 'played every FNCS grand final of 2025 in their region', 'Every 2025 FNCS final', (p) =>
+    every2025.has(p.id),
+  );
 
   // ------------------------------------------------------------ followers --
   // "Has 100K+ Twitch followers": a player's own channels, the count as the

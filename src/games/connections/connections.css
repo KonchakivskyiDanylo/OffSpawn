@@ -1,56 +1,124 @@
-/* Capped for the same reason the Tic Tac Toe board is: four 1fr columns on a
-   1120px page give 265px-wide tiles holding a seven-character handle. */
+/*
+ * Connections: the board is the page.
+ *
+ * Everything in play — the stats, the solved rows, the sixteen tiles and the
+ * buttons — shares one column, so nothing is wider than the board (the user,
+ * 14 Oct 2026: "The board is so tiny, but other buttons are so big in
+ * comparison"). The tiles were tiny because the grid centred itself with
+ * `margin: 0 auto` inside a flex column, and auto margins stop a flex item
+ * stretching: it shrank to four handle-wide columns while the buttons beside it
+ * filled the page. The column takes `width: 100%` up to its cap instead, and
+ * the grid inside it stretches.
+ */
+
+.cx-board {
+  --cx-gap: 8px;
+  /* Tile and row text is sized off this column, not the window. */
+  container-type: inline-size;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  gap: 12px;
+}
+/* Tenaball's tighter stats: the board is what needs the room. */
+.cx-board .stat {
+  padding: 6px 12px;
+}
+.cx-board .stat__value {
+  font-size: 1.15rem;
+}
+
+/* Solved rows above the tiles, on the tiles' own gap, so the two read as one board. */
+.cx-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cx-gap);
+}
+
 .cx-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  max-width: 640px;
-  margin: 0 auto;
+  gap: var(--cx-gap);
 }
 
+/* Wide rather than square, as on NYT's board: 144 × 84 at the cap, 64 tall on a phone. */
 .cx-tile {
-  min-height: 76px;
+  min-height: 72px;
+  min-height: clamp(64px, 14cqi, 84px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text);
-  font-weight: 700;
-  font-size: clamp(0.68rem, 2.4vw, 0.92rem);
+  font-weight: 800;
+  font-size: 0.9rem;
+  font-size: clamp(0.72rem, 3.1cqi, 1.05rem);
+  line-height: 1.15;
+  text-align: center;
+  /* A long handle breaks where it has to rather than pushing the column wide. */
+  overflow-wrap: anywhere;
   cursor: pointer;
-  padding: 6px 4px;
-  word-break: break-word;
-  line-height: 1.2;
-  transition: background 0.1s ease, border-color 0.1s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  transition:
+    background 0.1s ease,
+    border-color 0.1s ease,
+    transform 0.1s ease;
+}
+/* Eleven characters and up (Commandment, HighDistortion): a size down, so most still fit on one line. */
+.cx-tile--long {
+  font-size: 0.8rem;
+  font-size: clamp(0.64rem, 2.4cqi, 0.86rem);
 }
 .cx-tile:hover {
   background: var(--surface-3);
+  border-color: var(--border-strong);
 }
-.cx-tile--selected {
+.cx-tile:active {
+  transform: scale(0.97);
+}
+.cx-tile:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.cx-tile--selected,
+.cx-tile--selected:hover {
   background: var(--primary);
   border-color: var(--primary);
   color: #fff;
 }
 
+/* A solved group is one row of the board: the tiles' height, the board's width. */
 .cx-group {
+  min-height: 72px;
+  min-height: clamp(64px, 14cqi, 84px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   border-radius: 10px;
-  padding: 12px 14px;
+  padding: 8px 14px;
   text-align: center;
   border: 1px solid var(--border);
 }
 .cx-group--a {
-  background: rgba(234, 179, 8, 0.18);
+  background: var(--warning-soft);
   border-color: rgba(234, 179, 8, 0.45);
 }
 .cx-group--b {
-  background: rgba(34, 197, 94, 0.18);
+  background: var(--success-soft);
   border-color: rgba(34, 197, 94, 0.45);
 }
 .cx-group--c {
-  background: rgba(91, 140, 255, 0.18);
+  background: var(--primary-soft);
   border-color: rgba(91, 140, 255, 0.45);
 }
 .cx-group--d {
-  background: rgba(168, 85, 247, 0.18);
+  background: rgba(168, 85, 247, 0.16);
   border-color: rgba(168, 85, 247, 0.45);
 }
 .cx-group--missed {
@@ -59,20 +127,38 @@
 
 .cx-group__label {
   font-weight: 800;
-  font-size: 0.86rem;
+  font-size: 0.9rem;
+  font-size: clamp(0.8rem, 2.8cqi, 1rem);
   letter-spacing: -0.01em;
 }
 .cx-group__players {
-  font-size: 0.82rem;
+  font-size: 0.84rem;
+  font-size: clamp(0.76rem, 2.6cqi, 0.92rem);
   color: var(--text-muted);
-  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+/* Clear and Submit, the board's width between them; Submit is the one you came for. */
+.cx-actions {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: var(--cx-gap);
 }
 
 @media (max-width: 420px) {
-  .cx-tile {
-    min-height: 64px;
+  .cx-board {
+    --cx-gap: 6px;
   }
-  .cx-grid {
-    gap: 6px;
+  .cx-tile {
+    padding: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cx-tile {
+    transition: none;
+  }
+  .cx-tile:active {
+    transform: none;
   }
 }

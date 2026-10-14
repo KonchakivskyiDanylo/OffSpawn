@@ -764,3 +764,31 @@ button.an-tab[aria-pressed='true'] {
   padding: 8px;
   border-radius: 8px;
 }
+
+/* ------------------------------------------------- the grid builder (dev) -- */
+
+.grid-builder {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 10px 0;
+}
+.grid-builder__row {
+  display: contents;
+}
+.grid-builder__pick {
+  width: 100%;
+  font-size: 0.8rem;
+  padding: 6px 8px;
+}
+.grid-builder__cell {
+  min-height: 64px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.grid-builder__cell--thin {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+  background: var(--danger-soft);
+}

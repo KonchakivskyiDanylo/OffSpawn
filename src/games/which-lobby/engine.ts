@@ -8,9 +8,9 @@ import type { Level } from '@/games/shared/levels';
 import { lobbiesOf, lobbyTitle, type Lobby } from '@/games/shared/lobbies';
 
 /**
- * Pure logic for Which Lobby?: a tournament's leaderboard revealed from the
- * bottom up — a 40th, a 20th, a 7th, the podium, the winner — until you name
- * the tournament.
+ * Pure logic for Which Lobby?: a tournament's top 20 revealed from the bottom
+ * up — an 18th, a 14th, a 7th, the podium, the winner — until you name the
+ * tournament.
  *
  * Built to the user's roadmap (2 Oct 2026): placements one by one, the round
  * over when you name it or the placements run out. A guess is a round and a
@@ -64,27 +64,36 @@ export function asNamed(lobby: Lobby): Secret {
 }
 
 /**
- * Bands of the leaderboard, bottom to top, one finisher drawn from each: the
- * back half, then ever closer to the top, then 2nd–3rd, then the winner. Sized
- * by how far the results go, so a 33-team trios final gets six and a
- * 100-player solo final seven.
+ * The deepest place a leaderboard shows, whatever the size of the field.
+ *
+ * The reveal used to start in the back half and so printed places down to the
+ * last — "50th" for a duos final, "39th" for the Reload Elite Series at the
+ * 2026 Esports World Cup, a field no other major has (the user, 14 Oct 2026:
+ * "Don't write down to 50, it can be a spoiler. Like ewc had an unique format
+ * and 39 teams, which is obvious just from this"). The smallest field on
+ * record is 22 (Chapter 2 Season 1's Asia squads), so every one of the 186
+ * reaches 20th.
  */
-export function bands(size: number): [number, number][] {
-  const at = (share: number) => Math.max(1, Math.round(size * share));
-  const out: [number, number][] = [
-    [at(0.55) + 1, size],
-    [at(0.35) + 1, at(0.55)],
-    [at(0.2) + 1, at(0.35)],
-    [at(0.1) + 1, at(0.2)],
-  ];
-  let floor = at(0.1) + 1;
-  if (floor > 4) {
-    out.push([4, floor - 1]);
-    floor = 4;
-  }
-  out.push([2, Math.min(3, floor - 1)], [1, 1]);
-  return out.filter(([lo, hi]) => lo <= hi && hi <= size);
-}
+export const CUT = 20;
+
+/**
+ * Bands of the leaderboard, bottom to top, one finisher drawn from each, the
+ * same for every lobby: the top 20 in narrowing steps, then 2nd–3rd, then
+ * the winner. Fixed rather than sized to the field, so neither the places nor
+ * how many finishers there are say how big it was.
+ */
+export const BANDS: readonly (readonly [number, number])[] = [
+  [17, CUT],
+  [13, 16],
+  [9, 12],
+  [6, 8],
+  [4, 5],
+  [2, 3],
+  [1, 1],
+];
+
+/** Players on a team, by Liquipedia's format label. */
+const TEAM_SIZE: Record<string, number> = { Solo: 1, Duo: 2, Trio: 3, Squad: 4 };
 
 function pickFrom(options: Finisher[], how: 'famous' | 'weighted' | 'any', rng: Rng): Finisher {
   const fame = (finisher: Finisher) => finisher.players.reduce((sum, player) => sum + player.earnings, 0);
@@ -99,7 +108,40 @@ function pickFrom(options: Finisher[], how: 'famous' | 'weighted' | 'any', rng: 
   return options[options.length - 1];
 }
 
-/** The finishers, worst first. A band with nobody fully on the roster is skipped. */
+/**
+ * How many players a finisher of this lobby is: its format's team size, or —
+ * for a format the export does not label — the most common size in its results.
+ */
+function teamSize(lobby: Lobby, majors: Majors): number {
+  const known = lobby.mode ? TEAM_SIZE[lobby.mode] : undefined;
+  if (known) return known;
+  const counts = new Map<number, number>();
+  for (const { players } of majors.fieldOf(lobby.name)) counts.set(players.length, (counts.get(players.length) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 1;
+}
+
+/**
+ * The finishers that are whole teams on the roster, best first.
+ *
+ * `fieldOf` lists only players with a page, so a duo whose partner has none
+ * comes back as one player — Brandtman has no page, so FNCS 2023 Major 1
+ * Europe's 36th, Brandtman & Moneymaker, reads "Moneymaker" alone. And a
+ * shared place reads as its best end, so two duos tied 35–36 at the Reload
+ * Elite Series come back as one team of four at 35th (and two Oceania finals
+ * that list two teams at 1st, as one winner of four or six). Checking that
+ * everyone listed is on the roster let both through (the user, 14 Oct 2026:
+ * "I also saw the moments when it was 1 player and duos"); a finisher now has
+ * to be exactly a team.
+ */
+export function wholeTeams(lobby: Lobby, majors: Majors, byId: ReadonlyMap<string, RosterPlayer>): Finisher[] {
+  const size = teamSize(lobby, majors);
+  return majors.fieldOf(lobby.name).flatMap(({ placement, players }) => {
+    const known = players.flatMap((id) => byId.get(id) ?? []);
+    return players.length === size && known.length === size ? [{ placement, players: known }] : [];
+  });
+}
+
+/** The finishers, worst first. A band with no whole team in it is skipped. */
 export function cluesFor(
   lobby: Lobby,
   majors: Majors,
@@ -107,12 +149,9 @@ export function cluesFor(
   level: Level,
   rng: Rng,
 ): Finisher[] {
-  const field: Finisher[] = majors.fieldOf(lobby.name).flatMap(({ placement, players }) => {
-    const known = players.map((id) => byId.get(id));
-    return known.every(Boolean) && known.length > 0 ? [{ placement, players: known as RosterPlayer[] }] : [];
-  });
+  const field = wholeTeams(lobby, majors, byId);
   const out: Finisher[] = [];
-  for (const [lo, hi] of bands(lobby.size)) {
+  for (const [lo, hi] of BANDS) {
     const options = field.filter((finisher) => finisher.placement >= lo && finisher.placement <= hi);
     if (options.length) out.push(pickFrom(options, LEVELS[level].pick, rng));
   }

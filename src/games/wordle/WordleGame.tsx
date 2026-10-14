@@ -283,7 +283,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
                         <span aria-hidden="true">🔤</span> Anything
                       </>
                     }
-                    hint="Any letters the right length, so you can test letters freely."
+                    hint="Any letters of the right length."
                     selected={!namesOnlyPick}
                     onClick={() => setNamesOnly(false)}
                   />
@@ -293,7 +293,7 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
                         <span aria-hidden="true">👤</span> Player names only
                       </>
                     }
-                    hint="Every guess must be a real player’s name. Much harder."
+                    hint="Real player names only. Harder."
                     selected={namesOnlyPick}
                     onClick={() => setNamesOnly(true)}
                   />

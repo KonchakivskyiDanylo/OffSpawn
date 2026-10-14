@@ -2,10 +2,11 @@ import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
 import type { MajorResult } from '@/data/liquipedia/majors';
 import type { FameTier, RosterPlayer } from '@/data/liquipedia/roster';
 import { ordinal } from '@/lib/format';
-import { makeRng, shuffle, type Rng } from '@/lib/rng';
+import { makeRng, type Rng } from '@/lib/rng';
 
 /** Pure logic for Career Path. */
 
+/** Order reads the career oldest first; Random builds up, least telling result first. */
 export type Mode = 'order' | 'random';
 
 /** Clues in a round. Ten is enough for an arc and short enough to read. */
@@ -133,6 +134,24 @@ function eventWeight(result: MajorResult): number {
   return Math.min(1, Math.max(0, (pool - 4.8) / 2.4));
 }
 
+/**
+ * How much a result gives away: about 0 for a 100th in a regional final, 1.5
+ * for winning the World Cup. The finish counts most, on a log scale — a 1st is
+ * 1, a 5th 0.65, a 10th a half, a 43rd under a fifth — and the stage adds up
+ * to a half: a podium at the Globals tells more than one at a regional final.
+ */
+export function telling(result: MajorResult): number {
+  const place = Math.max(0, 1 - Math.log(Math.max(1, result.placement)) / Math.log(100));
+  return place + 0.5 * eventWeight(result);
+}
+
+/**
+ * How far Random's clues may stray from least to most telling. Neighbours can
+ * swap — a 25th and a 43rd come either way round — but a gap wider than this
+ * never reverses, so a 43rd never comes after a top 5 or a top 10.
+ */
+export const RAMP_JITTER = 0.25;
+
 /** Win, podium, top 10, top 25, the rest. */
 export function finishBand(placement: number): number {
   if (placement === 1) return 0;
@@ -250,12 +269,20 @@ function pickClues(
  * Puts the chosen clues in reveal order.
  *
  * Order is by date, and its opening was settled when the clues were picked.
- * Random is shuffled, then any signature sitting in the guarded opening swaps
- * places with the first ordinary clue behind it.
+ * Random builds up: the years come in any order, but the results go from the
+ * least telling to the most, give or take `RAMP_JITTER` (the user, 14 Oct
+ * 2026: "later places give you much more information… no top 43 in last
+ * guess, but like top 5"). A plain shuffle used to leave a 43rd for the last
+ * clue as often as a win. Then any signature still in the guarded opening —
+ * only a hand of nearly all wins has one there — swaps places with the first
+ * ordinary clue behind it.
  */
 function revealOrder(clues: MajorResult[], secret: RosterPlayer, mode: Mode, rng: Rng): MajorResult[] {
   if (mode === 'order') return [...clues].sort((a, b) => time(a) - time(b));
-  const out = shuffle(rng, clues);
+  const out = clues
+    .map((clue) => ({ clue, key: telling(clue) + RAMP_JITTER * rng() }))
+    .sort((a, b) => a.key - b.key)
+    .map((entry) => entry.clue);
   const guard = Math.min(OPENING_GUARD[secret.tier], out.length);
   for (let i = 0; i < guard; i++) {
     if (!isSignature(out[i])) continue;
@@ -274,7 +301,7 @@ function revealOrder(clues: MajorResult[], secret: RosterPlayer, mode: Mode, rng
  *
  * `results` must be the player's majors oldest first — `Majors.resultsFor`
  * guarantees that. Both modes draw the same kind of hand (see `pickClues`);
- * Order reads it by date, Random in no order at all.
+ * Order reads it by date, Random from the least telling result to the most.
  */
 export function createGame(
   secret: RosterPlayer,

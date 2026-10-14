@@ -46,9 +46,9 @@ const meta = getGame('higher-lower')!;
  * `engine.ts`).
  */
 const LEVELS: LevelOption<Difficulty>[] = [
-  { id: 'easy', label: '🟢 Easy', hint: 'Famous names far apart. Gets harder slowly.' },
-  { id: 'medium', label: '🟡 Medium', hint: 'Famous names far apart. Gets harder sooner.' },
-  { id: 'hard', label: '🔴 Hard', hint: 'Famous names far apart. Gets harder much quicker.' },
+  { id: 'easy', label: '🟢 Easy', hint: 'Gets closer and less known slowly.' },
+  { id: 'medium', label: '🟡 Medium', hint: 'Gets closer and less known sooner.' },
+  { id: 'hard', label: '🔴 Hard', hint: 'Gets closer and less known fast.' },
 ];
 
 function displayValue(player: Contender, category: Category): string {

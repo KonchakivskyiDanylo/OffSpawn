@@ -153,7 +153,7 @@ try {
   // The funnel read back: totals, the landing page, the halves, the hours.
   const t = data.traffic?.totals ?? {};
   check(
-    t.visits === 1 && t.opens === 2 && t.starts === 3 && t.engaged === 2 && t.finished === 1 && t.won === 1,
+    t.visits === 1 && t.opens === 2 && t.starts === 3 && t.engaged === 2 && t.finished === 1 && t.tracked === 1 && t.won === 1,
     `the funnel totals read ${JSON.stringify(t)}`,
   );
   check(data.traffic?.landing[0]?.label === 'home', 'the visit did not land on the home page');
@@ -165,6 +165,9 @@ try {
     ['/game/tenaball?puzzle=3', '/game/tenite?puzzle=3'],
     ['/game/tenaball/', '/game/tenite'],
     ['/game/wordle', '/game/fortnitedle'],
+    ['/game/tic-tac-toe', '/game/box-fight'],
+    ['/game/who-are-ya', '/game/ready-up'],
+    ['/game/connections', '/game/squads'],
   ]) {
     const moved = await fetch(`${BASE}${from}`, { redirect: 'manual' });
     check(moved.status === 301 && moved.headers.get('location') === to, `${from} answered ${moved.status} → ${moved.headers.get('location')}, expected 301 → ${to}`);
@@ -188,7 +191,7 @@ try {
     });
   for (const [route, host, proto, to] of [
     ['/', 'www.offspawn.app', 'https', 'https://offspawn.app/'],
-    ['/game/tic-tac-toe', 'www.offspawn.app', 'http', 'https://offspawn.app/game/tic-tac-toe'],
+    ['/game/box-fight', 'www.offspawn.app', 'http', 'https://offspawn.app/game/box-fight'],
     ['/credits', 'offspawn.app', 'http', 'https://offspawn.app/credits'],
     ['/game/tenaball?puzzle=3', 'www.offspawn.app', 'http', 'https://offspawn.app/game/tenite?puzzle=3'],
   ] as const) {
@@ -196,10 +199,10 @@ try {
     check(got.status === 301 && got.location === to, `${proto}://${host}${route} answered ${got.status} → ${got.location}, expected 301 → ${to}`);
   }
   for (const [route, host, proto, method] of [
-    ['/game/tic-tac-toe', 'offspawn.app', 'https', 'GET'],
+    ['/game/box-fight', 'offspawn.app', 'https', 'GET'],
     ['/api/daily/2026-10-05', 'www.offspawn.app', 'http', 'GET'],
     ['/api/support', 'www.offspawn.app', 'https', 'POST'],
-    ['/game/tic-tac-toe', 'offspawn-1234.herokuapp.com', 'https', 'GET'],
+    ['/game/box-fight', 'offspawn-1234.herokuapp.com', 'https', 'GET'],
   ] as const) {
     const got = await asHeroku(route, host, proto, method);
     check(got.status !== 301, `${method} ${proto}://${host}${route} was redirected to ${got.location}`);
@@ -274,6 +277,21 @@ try {
   );
   const later = (await request(`/api/admin/liquipedia?after=${pings?.[0]?.id}`, {}, cookie)).body as unknown[];
   check(later?.length === 1, `the cursor did not skip what was already read (${later?.length})`);
+
+  // /analytics/data: the data's dates, the pings since the export (both of
+  // today's), and an Update button that says it is not set up rather than failing.
+  check((await request('/api/admin/data')).status === 401, 'the data status answered without a login');
+  const status = (await request('/api/admin/data', {}, cookie)).body as {
+    dates: { date: string | null }[];
+    webhook: boolean;
+    changes: { total: number; pages: number };
+    updater: { configured: boolean };
+  };
+  check(
+    Boolean(status?.dates?.[0]?.date) && status.webhook && status.changes.total === 2 && status.updater.configured === false,
+    `the data status reads ${JSON.stringify(status)}`,
+  );
+  check((await post('/api/admin/data/update', {}, cookie)).status === 502, 'Update now did not refuse without its settings');
 
   // ---- limits: the support form is capped at five per ten minutes per client
   let limited = false;

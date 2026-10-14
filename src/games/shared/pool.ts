@@ -198,11 +198,14 @@ export const RANDOM_MIX: Readonly<Record<Difficulty, number>> = { easy: 0.5, med
 /**
  * Deals the next secret player for a game that has one.
  *
- * Random weights the draw by tier (see `RANDOM_MIX`). An event field takes its
- * regions in turn (see `dealInTurn`), because a field is lopsided and an even
- * draw over it hardly ever reached the small regions. Everything else deals
- * evenly: a chosen tier is one tier, and Choose → Any promises "no ranking
- * applied" and keeps it.
+ * Random weights the draw by tier (see `RANDOM_MIX`), and so does Choose → Any:
+ * dealt evenly, "Europe, any difficulty" was 80% names nobody knows, because
+ * the Hard tier is most of every region (the user, 14 Oct 2026: "I would like
+ * it to be similar proportions to just a random mode"). With a region chosen,
+ * the tier is the region's own, so Easy means well known there. An event field
+ * takes its regions in turn (see `dealInTurn`), because a field is lopsided and
+ * an even draw over it hardly ever reached the small regions. A chosen tier is
+ * one tier, dealt evenly.
  */
 export function dealSecret<T extends RosterPlayer>(
   players: readonly T[],
@@ -210,12 +213,18 @@ export function dealSecret<T extends RosterPlayer>(
   pools: Pools | null,
   event: string | null,
   choice: PoolChoice,
+  /** The draw's seed; the clock by default. A check dealing in a loop passes its own. */
+  seed?: string,
 ): Deal<T> | null {
   if (pools?.get(event)) return dealInTurn(players, seen, (player) => player.region ?? '');
   if (choice.mode === 'random') {
-    return dealWeighted(players, seen, (player) => player.tier, RANDOM_MIX);
+    return dealWeighted(players, seen, (player) => player.tier, RANDOM_MIX, seed);
   }
-  return deal(players, seen);
+  const { region, difficulty } = effective(choice);
+  if (difficulty === 'any') {
+    return dealWeighted(players, seen, (player) => (region ? player.regionTier : player.tier), RANDOM_MIX, seed);
+  }
+  return deal(players, seen, seed);
 }
 
 /** Exactly this tier under the current choice, with no widening — what a card counts. */

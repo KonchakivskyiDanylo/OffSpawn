@@ -1,6 +1,6 @@
 import { readLocal, useLocalState, writeLocal } from '@/lib/storage';
 import { addDays } from './day';
-import { DAILY_GAMES, type DailyGame, type DailyResult } from './types';
+import { DAILY_GAMES, puzzleId, type DailyGame, type DailyResult } from './types';
 
 /**
  * A player's daily history, in this browser only — there are no accounts yet
@@ -55,14 +55,27 @@ function roundFor<Snap>(game: DailyGame, day: string): SavedRound<Snap> | null {
   return (readLocal<PastRounds>(pastKey(game), {})[day] as SavedRound<Snap> | undefined) ?? null;
 }
 
+/**
+ * The puzzle a round was saved on, as `puzzleId`. Rounds saved before 14 Oct
+ * 2026 carry the whole descriptor, so it is read back through the same.
+ */
+function savedId(text: string | undefined): string | null {
+  if (text === undefined) return null;
+  try {
+    return puzzleId(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+
 /** The saved round for `day` and `puzzle`, or null. */
 export function savedRound<Snap>(game: DailyGame, day: string, puzzle: unknown): Snap | null {
   const saved = roundFor<Snap>(game, day);
-  return saved && saved.puzzle === JSON.stringify(puzzle) ? saved.snap : null;
+  return saved && savedId(saved.puzzle) === puzzleId(puzzle) ? saved.snap : null;
 }
 
 export function saveRound<Snap>(game: DailyGame, day: string, puzzle: unknown, snap: Snap): void {
-  const round: SavedRound<Snap> = { day, puzzle: JSON.stringify(puzzle), snap };
+  const round: SavedRound<Snap> = { day, puzzle: puzzleId(puzzle), snap };
   const latest = readLocal<SavedRound<unknown> | null>(roundKey(game), null);
   if (!latest || latest.day === day) {
     writeLocal(roundKey(game), round);

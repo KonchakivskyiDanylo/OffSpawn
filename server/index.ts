@@ -16,10 +16,11 @@ import {
   type SupportRequest,
 } from '@/analytics/types';
 import { addDays, DAILY_START, dayKey, isDayKey, puzzleNumber } from '@/daily/day';
-import { DAILY_GAMES, type DailyGame, type DailySet } from '@/daily/types';
+import { DAILY_GAMES, unfrozen, unpinned, type DailyGame, type DailySet } from '@/daily/types';
 import { Socials } from '@/data/socials';
 import { movedPath } from '@/games/moved';
 import { SITE_HOST, SITE_URL } from '@/lib/site';
+import { dataStatus, startDataUpdate } from './data-status';
 import { refreshSocials, scheduleSocials, servedSocials, socialsStatus, startTwitchLogin } from './socials';
 import { hourKey, openStore, type PageChange } from './store';
 
@@ -57,6 +58,8 @@ import { hourKey, openStore, type PageChange } from './store';
  *                     webhook route does not exist without it
  *   YOUTUBE_API_KEY, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET
  *                     the follower counts — see socials.ts
+ *   DATA_UPDATE_TOKEN, DATA_UPDATE_REPO, DATA_UPDATE_BRANCH
+ *                     the Update button on /analytics/data — see data-status.ts
  */
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -203,13 +206,21 @@ async function dailyEnv() {
 
 async function dailySet(day: string): Promise<DailySet> {
   const kept = await store.daily(day);
-  if (kept) return kept;
+  // A day not reached yet stays a descriptor; from its date on, its board is pinned.
+  if (kept && (day > dayKey() || !unfrozen(kept))) return kept;
   if (!making.has(day)) {
     const made = (async () => {
       const { generate, data } = await dailyEnv();
       // Both sides: the schedule editor makes days ahead, and a day steers clear of those too.
       const history = await store.dailies(addDays(day, -DAILY_HISTORY));
-      return store.addDaily(generate.generateDaily(day, data, history));
+      const set = kept ?? (await store.addDaily(generate.generateDaily(day, data, history)));
+      if (day > dayKey()) return set;
+      // Pinned on the data of the first request on or after the day: a data
+      // update later changes the boards to come, never this one.
+      const frozen = generate.freezeDay(set, data, dayKey());
+      if (!frozen) return set;
+      await store.setDaily(frozen);
+      return frozen;
     })().finally(() => making.delete(day));
     making.set(day, made);
   }
@@ -472,9 +483,10 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
       }
       await serially(async () => {
         const [first, second] = [await dailySet(a), await dailySet(b)];
+        // Today's board is pinned; moved to another day, it is pinned again there.
         const take = (set: DailySet, from: DailySet): DailySet => ({
           ...set,
-          puzzles: { ...set.puzzles, [game]: from.puzzles[game] },
+          puzzles: { ...set.puzzles, [game]: unpinned(from.puzzles[game]) },
         });
         await store.setDaily(take(first, second));
         await store.setDaily(take(second, first));
@@ -503,7 +515,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
       if (!puzzle) throw new HttpError(422, 'Could not make that puzzle');
       for (const from of coming) {
         const other = others.find((candidate) => candidate.day === from)!;
-        await store.setDaily({ ...other, puzzles: { ...other.puzzles, [game]: set.puzzles[game] } });
+        await store.setDaily({ ...other, puzzles: { ...other.puzzles, [game]: unpinned(set.puzzles[game]) } });
       }
       await store.setDaily({ ...set, puzzles: { ...set.puzzles, [game]: puzzle } });
     });
@@ -519,6 +531,31 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
   }
   if (route === 'GET /api/admin/support') return send(res, 200, await store.support());
   if (route === 'GET /api/admin/errors') return send(res, 200, await store.errors(200));
+  // How old the Liquipedia data is, and the Update button — see data-status.ts.
+  if (route === 'GET /api/admin/data') {
+    const { data } = await dailyEnv();
+    const { EXPORT_DATE } = await import('@/data/liquipedia/roster');
+    return send(
+      res,
+      200,
+      await dataStatus(store, {
+        exportDate: EXPORT_DATE,
+        files: [
+          { label: 'Boards (rankings.json)', date: data.rankings.generated || null },
+          { label: 'Facts (facts.json)', date: data.facts.generated || null },
+        ],
+        webhook: Boolean(WEBHOOK_SECRET),
+      }),
+    );
+  }
+  if (route === 'POST /api/admin/data/update') {
+    try {
+      await startDataUpdate();
+    } catch (error) {
+      throw new HttpError(502, (error as Error).message);
+    }
+    return send(res, 202, { started: true });
+  }
   // The webhook's pings after `after`, oldest first, for the data updater.
   if (route === 'GET /api/admin/liquipedia') {
     const after = Math.max(0, Math.floor(Number(url.searchParams.get('after')) || 0));

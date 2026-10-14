@@ -181,3 +181,8 @@
     font-size: 0.78rem;
   }
 }
+
+/* "As of 13 Oct 2026" on a pinned daily board: the numbers' date, not a rule. */
+.tb-head__asof {
+  white-space: nowrap;
+}

@@ -14,11 +14,12 @@ import { getGame } from '@/games/registry';
 import { giveUp, guess, skip } from '@/games/shared/clue-round';
 import { dealFresh, LEVEL_LABEL, type Level } from '@/games/shared/levels';
 import { lobbyTitle, type Lobby } from '@/games/shared/lobbies';
-import { dayMonthYear, moneyShort, ordinal, plural } from '@/lib/format';
+import { dayMonthYear, moneyShort, plural } from '@/lib/format';
 import {
   asNamed,
   compare,
   createGame,
+  CUT,
   finisherName,
   lobbiesFor,
   record as roundRecord,
@@ -140,8 +141,9 @@ function Game({ roster, majors }: { roster: Roster; majors: Majors }) {
               );
             })}
           </ol>
+          {/* The same top 20 for every lobby: how far the results went would name the event. */}
           <footer className="wl-board__foot tiny">
-            {secret.mode ? `${secret.mode}s` : 'Results'} · down to {ordinal(secret.size)}
+            {secret.mode ? `${secret.mode}s` : 'Results'} · top {CUT}
           </footer>
         </section>
 

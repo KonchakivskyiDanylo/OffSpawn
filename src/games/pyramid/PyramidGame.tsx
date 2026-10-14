@@ -69,7 +69,10 @@ function Game({ roster, facts }: { roster: Roster; facts: Facts }) {
    * costs that category rather than the game.
    */
   const [rankings, setRankings] = useState<Rankings | null>(null);
-  /** Every finish at every major, so a tournament pyramid can reach past the top ten. Same terms. */
+  /**
+   * Every finish at every major: tournaments past their top ten, FNCS top 10s
+   * and the Globals averages. Same terms — without it those are not drawn.
+   */
   const [majors, setMajors] = useState<Majors | null>(null);
   /** Follower counts, for the follower pyramids; none is the same as no such category. */
   const socials = useSocials();

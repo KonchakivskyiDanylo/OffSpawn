@@ -5,8 +5,12 @@ import type { DailyContext, DailyPuzzles } from '@/daily/types';
 import { levelPlayers } from '@/games/shared/levels';
 import { createGame, roundOf, type GameState, type Mode } from './engine';
 
-/** The daily career reads oldest first, the way the game opens by default. */
-export const DAILY_MODE: Mode = 'order';
+/**
+ * The daily builds up, best results last, the way the game opens by default
+ * since 14 Oct 2026 (oldest first before; no Career Path daily was served in
+ * between, so no kept day changes its label).
+ */
+export const DAILY_MODE: Mode = 'random';
 
 type Puzzle = DailyPuzzles['career-path'];
 

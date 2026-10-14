@@ -243,6 +243,13 @@ export interface FunnelTotals {
   starts: number;
   /** Rounds finished — the recorded rounds. */
   finished: number;
+  /**
+   * Of those, the ones finished once starts were being counted — what the
+   * finish rate sets against `starts`. Rounds were recorded from the launch
+   * at the end of September, starts only from 4 Oct 2026, so a range reaching
+   * back before that had more rounds finished than started.
+   */
+  tracked: number;
   /** Of those, won or cleared. */
   won: number;
 }
@@ -267,6 +274,8 @@ export interface Traffic {
   landing: Count[];
   /** Page opens by weekday (0 = Monday) and hour, Berlin time: `hours[weekday][hour]`. */
   hours: number[][];
+  /** The first UTC hour with a count, "YYYY-MM-DDTHH" — when `tracked` starts; empty with none. */
+  countingSince: string;
 }
 
 export interface Dashboard {
@@ -753,7 +762,7 @@ export function readSince(days: number, now: Date = new Date()): Date | undefine
 
 // ----------------------------------------------------------------- traffic --
 
-const emptyTotals = (): FunnelTotals => ({ visits: 0, opens: 0, engaged: 0, starts: 0, finished: 0, won: 0 });
+const emptyTotals = (): FunnelTotals => ({ visits: 0, opens: 0, engaged: 0, starts: 0, finished: 0, tracked: 0, won: 0 });
 
 const STEP_TOTAL: Record<FunnelStep, keyof FunnelTotals | undefined> = {
   open: 'opens',
@@ -847,6 +856,12 @@ export function traffic(
     }
   }
 
+  // The first hour anything was counted, whatever the filters: the funnel
+  // began on 4 Oct 2026 for every page at once. A round finished before it has
+  // no start to set against, so it is not `tracked`.
+  let counting = '';
+  for (const count of counts) if (count?.hour && (!counting || count.hour < counting)) counting = count.hour;
+
   for (const round of rounds) {
     const body = round.body;
     if (filter.game && body.game !== filter.game) continue;
@@ -854,19 +869,23 @@ export function traffic(
     if (mode && (mode === 'daily') !== daily) continue;
     const at = Date.parse(round.at);
     const won = body.outcome === 'won' || body.outcome === 'cleared' ? 1 : 0;
+    const tracked = counting !== '' && String(round.at).slice(0, 13) >= counting ? 1 : 0;
     const day = byDay.get(String(round.at).slice(0, 10));
     if (day) {
       day.finished++;
+      day.tracked += tracked;
       day.won += won;
     }
     if (at >= start || !round.at) {
       const row = gameRow(body.game);
       for (const t of [totals, row.all, daily ? row.daily : row.unlimited]) {
         t.finished++;
+        t.tracked += tracked;
         t.won += won;
       }
     } else if (previous && at >= before) {
       previous.finished++;
+      previous.tracked += tracked;
       previous.won += won;
     }
   }
@@ -878,6 +897,7 @@ export function traffic(
     games: [...games.values()].sort((a, b) => b.all.opens + b.all.finished - (a.all.opens + a.all.finished)),
     landing: top(landing, 20),
     hours,
+    countingSince: counting,
   };
 }
 

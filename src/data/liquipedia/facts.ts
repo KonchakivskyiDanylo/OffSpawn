@@ -273,6 +273,19 @@ export class Facts {
   }
 
   /**
+   * The same partners with how many of those titles each shared: Pollo is on
+   * more of Peterbot's than Bylah is. Contextinho weighs a pair by it.
+   */
+  fncsTitlesWith(playerId: string): Map<string, number> {
+    const titles = new Map<string, number>();
+    for (const index of this.of(playerId).won) {
+      if (!isRegionalFinal(this.events[index])) continue;
+      for (const id of this.wonAt(index)) if (id !== playerId) titles.set(id, (titles.get(id) ?? 0) + 1);
+    }
+    return titles;
+  }
+
+  /**
    * Rounds of the FNCS: every region's grand final inside a week of each other.
    *
    * Clustered on the date rather than parsed out of the name, because the name

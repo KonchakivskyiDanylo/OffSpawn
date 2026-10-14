@@ -59,7 +59,7 @@ export function GamePage({ pools }: { pools: Pools | null }) {
           </Card>
           <div className="an-grid-2">
             <Card title="Conversion">
-              <Conversion totals={data.traffic.totals} />
+              <Conversion totals={data.traffic.totals} since={data.traffic.countingSince} />
             </Card>
             <Card title="Daily and unlimited">
               {halves ? <Halves halves={halves} /> : <p className="small muted">Nothing in this range yet.</p>}

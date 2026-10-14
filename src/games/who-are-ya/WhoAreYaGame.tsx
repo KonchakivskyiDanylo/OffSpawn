@@ -52,12 +52,12 @@ const meta = getGame('who-are-ya')!;
  * different things.
  */
 const MODES: { id: Mode; label: string; hint: string }[] = [
-  { id: 'easy', label: 'Counts shown', hint: 'Fewest → most shared tournaments, with the count on each.' },
-  { id: 'hard', label: 'Counts hidden', hint: 'Same order, but you do not get to see the numbers.' },
+  { id: 'easy', label: 'Counts shown', hint: 'Fewest to most shared tournaments, with each count.' },
+  { id: 'hard', label: 'Counts hidden', hint: 'The same order, no numbers.' },
   {
     id: 'random',
     label: 'Random order',
-    hint: 'Shuffled, with the counts hidden. The top teammate is never one of the first four.',
+    hint: 'Shuffled, no counts. The top teammate is never in the first four.',
   },
 ];
 
@@ -108,7 +108,7 @@ function Game({
   const setGame = (next: GameState) => (dailyOn ? daily.setState(next) : setPractice(next));
 
   useRoundRecorder('who-are-ya', dailyOn ? daily.endedHere : game !== null && game.status !== 'playing', () => ({
-    title: `Who Are Ya? — ${game!.secret.name}`,
+    title: `${meta.title} — ${game!.secret.name}`,
     data: teammates.generated,
     setup: dailyOn ? { daily: daily.day, mode: game!.mode } : poolSetup(event, choice, game!.mode),
     ...roundRecord(game!),

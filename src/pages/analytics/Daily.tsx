@@ -30,8 +30,11 @@ interface Option {
   id: string;
   label: string;
   group?: string;
-  /** Days a board or a list is already on; `changed` when its answers are different now, `past` once played. */
-  used?: { day: string; changed: boolean; past: boolean }[];
+  /**
+   * Days a board or a list is already on; `changed` when its answers are
+   * different now, `past` once played, `rested` when over 90 days away (`SAME_REST`).
+   */
+  used?: { day: string; changed: boolean; past: boolean; rested?: boolean }[];
 }
 
 /** "Mon 5 Oct". */
@@ -225,9 +228,10 @@ function Chooser({ game, onPick, onClose }: { game: DailyGame; onPick: (id: stri
     const needle = query.trim().toLowerCase();
     const all = options ?? [];
     const found = needle ? all.filter((o) => `${o.label} ${o.group ?? ''}`.toLowerCase().includes(needle)) : all;
-    // The fresh ones first: never used, then changed since, then used as they are.
+    // The fresh ones first: never used, then changed or rested since, then used as they are.
+    const free = (use: NonNullable<Option['used']>[number]) => use.changed || use.rested;
     const rank = (o: Option) =>
-      !o.used?.length ? 0 : o.used.some((use) => use.past && !use.changed) ? 3 : o.used.every((use) => use.changed) ? 1 : 2;
+      !o.used?.length ? 0 : o.used.some((use) => use.past && !free(use)) ? 3 : o.used.every(free) ? 1 : 2;
     return [...found].sort((a, b) => rank(a) - rank(b)).slice(0, 60);
   }, [options, query]);
 
@@ -248,8 +252,8 @@ function Chooser({ game, onPick, onClose }: { game: DailyGame; onPick: (id: stri
       <div className="stack-sm" style={{ maxHeight: 260, overflowY: 'auto' }}>
         {shown.map((option) => {
           const used = option.used ?? [];
-          // Played already with the same answers: shown, so you can see when, but not choosable.
-          const blocked = used.some((use) => use.past && !use.changed);
+          // Played in the last 90 days with the same answers: shown, so you can see when, but not choosable.
+          const blocked = used.some((use) => use.past && !use.changed && !use.rested);
           const moves = used.filter((use) => !use.past && !use.changed);
           return (
             <button
@@ -258,7 +262,7 @@ function Chooser({ game, onPick, onClose }: { game: DailyGame; onPick: (id: stri
               className="picker-option"
               disabled={blocked}
               style={blocked ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
-              title={blocked ? 'Already played, and its answers have not changed since' : undefined}
+              title={blocked ? 'Played in the last 90 days, and its answers have not changed since' : undefined}
               onClick={() => onPick(option.id)}
             >
               {option.label} {option.group ? <span className="faint">· {option.group}</span> : null}
@@ -269,7 +273,7 @@ function Chooser({ game, onPick, onClose }: { game: DailyGame; onPick: (id: stri
                     ? `· played ${used.filter((use) => use.past).map((use) => dayName(use.day)).join(', ')}`
                     : moves.length
                       ? `· on ${moves.map((use) => dayName(use.day)).join(', ')} — choosing it swaps the two days`
-                      : `· used ${used.map((use) => dayName(use.day)).join(', ')} — answers changed since`}
+                      : `· used ${used.map((use) => dayName(use.day)).join(', ')} — ${used.every((use) => use.changed) ? 'answers changed since' : 'over 90 days ago'}`}
                 </span>
               ) : null}
             </button>

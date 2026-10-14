@@ -1,4 +1,5 @@
 import type { Rng } from '@/lib/rng';
+import type { Board } from '@/data/liquipedia/rankings';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 
 /**
@@ -38,8 +39,15 @@ export interface DailyPuzzles {
   'career-path': { secret: string; clues: string[] };
   /** `clues` are teammate ids, in the order they are revealed. */
   'who-are-ya': { secret: string; clues: string[] };
-  /** `sig` fingerprints who was on the board that day (`reuse.ts`), so a changed board can come back. */
-  tenaball: { board: string; sig?: string };
+  /**
+   * `sig` fingerprints who was on the board that day (`reuse.ts`), so a changed
+   * board can come back. `frozen` is the board itself, rows and numbers, pinned
+   * the first time the day is served on or after its date (`freezeDay` in
+   * `generate.ts`): a data update afterwards changes the boards to come, never
+   * one already played. Absent on a day not reached yet, made ahead by the
+   * schedule editor, so it is pinned on its own day's data.
+   */
+  tenaball: { board: string; sig?: string; frozen?: Board };
   list: { list: string; sig?: string };
   'tic-tac-toe': { rows: string[]; cols: string[] };
 }
@@ -52,6 +60,33 @@ export interface DailySet {
    * needs was absent — and its page says so instead of inventing a puzzle.
    */
   puzzles: Partial<DailyPuzzles>;
+}
+
+/** Whether a day served on or after its date still has a board to pin (`freezeDay`). */
+export function unfrozen(set: DailySet): boolean {
+  return Boolean(set.puzzles.tenaball && !set.puzzles.tenaball.frozen);
+}
+
+/**
+ * Which puzzle a descriptor is, as text: all of it but what the server adds
+ * once the day is under way — the board pinned on the day (`frozen`) and the
+ * fingerprint pinning brings up to date (`sig`). A saved round is matched on
+ * this, so pinning a day already begun orphans nobody's round.
+ */
+export function puzzleId(puzzle: unknown): string {
+  if (!puzzle || typeof puzzle !== 'object') return JSON.stringify(puzzle ?? null);
+  const { frozen: _frozen, sig: _sig, ...rest } = puzzle as Record<string, unknown>;
+  return JSON.stringify(rest);
+}
+
+/**
+ * A puzzle without its pinned board, for moving it to another day in the
+ * schedule editor: it is pinned again on the day it lands on.
+ */
+export function unpinned<P>(puzzle: P): P {
+  if (!puzzle || typeof puzzle !== 'object' || !('frozen' in puzzle)) return puzzle;
+  const { frozen: _frozen, ...rest } = puzzle as P & { frozen?: unknown };
+  return rest as P;
 }
 
 /** What a game's daily picker gets to choose with. */

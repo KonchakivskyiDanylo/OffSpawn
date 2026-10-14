@@ -8,7 +8,7 @@ import type { Socials } from '@/data/socials';
 import { pickDaily as careerPath } from '@/games/career-path/daily';
 import { buildCriteria } from '@/games/list/criteria';
 import { pickDaily as list } from '@/games/list/daily';
-import { pickDaily as tenaball } from '@/games/tenaball/daily';
+import { freezeDaily as freezeBoard, pickDaily as tenaball } from '@/games/tenaball/daily';
 import { pickDaily as ticTacToe } from '@/games/tic-tac-toe/daily';
 import { pickDaily as whoAreYa } from '@/games/who-are-ya/daily';
 import { pickDaily as wordle } from '@/games/wordle/daily';
@@ -175,4 +175,20 @@ export function generateDaily(
     }
   }
   return { day, puzzles };
+}
+
+/**
+ * Pins a day's Tenite board to the data it is being played on: the server
+ * calls this the first time it serves a day on or after its date, and keeps
+ * what it returns. Null when there is nothing new to keep.
+ *
+ * Only Tenite is pinned; the other dailies are rebuilt from their descriptor
+ * (a player, or rule ids), which is enough while they are not served. List
+ * and Tic Tac Toe would want the same before they are a daily again.
+ */
+export function freezeDay(set: DailySet, data: DailyData, today: string): DailySet | null {
+  const puzzle = set.puzzles.tenaball;
+  if (!puzzle) return null;
+  const frozen = freezeBoard(puzzle, data.rankings, data.roster, data.socials ?? null, data.majors, today);
+  return frozen ? { ...set, puzzles: { ...set.puzzles, tenaball: frozen } } : null;
 }

@@ -148,7 +148,7 @@ export function PoolSetup({
                               <span aria-hidden="true">🎲</span> Any
                             </>
                           }
-                          hint="No ranking applied."
+                          hint="Every level, leaning to names you know — like Random."
                           selected={value.difficulty === 'any'}
                           disabled={difficultyCounts.any === 0}
                           onClick={() => set({ difficulty: 'any' })}

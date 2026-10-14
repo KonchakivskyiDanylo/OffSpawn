@@ -72,7 +72,7 @@ function Game({
   const [game, setGame] = useState<GameState | null>(null);
 
   useRoundRecorder('connections', game !== null && game.status !== 'playing', () => ({
-    title: 'Connections',
+    title: meta.title,
     data: facts.generated,
     setup: poolSetup(event, choice),
     ...roundRecord(game!),
@@ -146,13 +146,14 @@ function Game({
         </button>
       }
     >
-      <div className="stack">
+      <div className="stack cx-board">
         <div className="stats">
           <Stat label="Groups" value={`${game.solved.length}/4`} />
           <Stat label="Lives" value={<Hearts left={livesLeft(game)} total={MAX_MISTAKES} />} />
         </div>
 
-        <div className="stack-sm">
+        {/* Solved rows and the tiles left are one board: a solved group takes a row's place. */}
+        <div className="cx-rows">
           {game.solved.map((group) => (
             <SolvedGroup key={group.id} group={group} tone={toneOf(group)} />
           ))}
@@ -161,22 +162,22 @@ function Game({
                 <SolvedGroup key={group.id} group={group} tone={toneOf(group)} missed />
               ))
             : null}
+          {!finished ? (
+            <div className="cx-grid">
+              {remaining.map((player) => (
+                <button
+                  key={player.id}
+                  type="button"
+                  className={`cx-tile${player.name.length > 10 ? ' cx-tile--long' : ''}${game.selected.includes(player.id) ? ' cx-tile--selected' : ''}`}
+                  aria-pressed={game.selected.includes(player.id)}
+                  onClick={() => onTile(player)}
+                >
+                  {player.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
-
-        {!finished ? (
-          <div className="cx-grid">
-            {remaining.map((player) => (
-              <button
-                key={player.id}
-                type="button"
-                className={`cx-tile${game.selected.includes(player.id) ? ' cx-tile--selected' : ''}`}
-                onClick={() => onTile(player)}
-              >
-                {player.name}
-              </button>
-            ))}
-          </div>
-        ) : null}
 
         {/*
          * One away, and only one away.
@@ -211,11 +212,10 @@ function Game({
           </div>
         ) : (
           <div className="stack-sm">
-            <div className="row">
+            <div className="cx-actions">
               <button
                 type="button"
                 className="btn"
-                style={{ flex: 1 }}
                 disabled={game.selected.length === 0}
                 onClick={() => setGame((prev) => (prev ? { ...prev, selected: [], near: null } : prev))}
               >
@@ -224,7 +224,6 @@ function Game({
               <button
                 type="button"
                 className="btn btn--primary"
-                style={{ flex: 2 }}
                 disabled={game.selected.length !== GROUP_SIZE}
                 onClick={() => setGame((prev) => (prev ? submit(prev) : prev))}
               >

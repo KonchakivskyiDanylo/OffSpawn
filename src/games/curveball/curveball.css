@@ -14,6 +14,11 @@
   stroke: var(--border);
   stroke-width: 1;
 }
+/* $1M, where the scale changes: the band above it is squeezed. */
+.cb-grid--knee line {
+  stroke: var(--border-strong);
+  stroke-dasharray: 6 4;
+}
 .cb-grid text,
 .cb-slot text {
   fill: var(--text-faint);

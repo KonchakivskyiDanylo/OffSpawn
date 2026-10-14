@@ -39,16 +39,19 @@ import './career-path.css';
 
 const meta = getGame('career-path')!;
 
+// Random first and the default since 14 Oct 2026 (the user: "random would be a
+// better game mode overall, with like last placements which give you better
+// information").
 const MODES: { id: Mode; label: string; hint: string }[] = [
-  {
-    id: 'order',
-    label: 'Order',
-    hint: 'Ten results spread across the career and read oldest first, like a story. It never opens on the result that gives the player away.',
-  },
   {
     id: 'random',
     label: 'Random',
-    hint: 'The same kind of ten, in no order at all. No arc to read — just ten facts.',
+    hint: 'Ten results from any year, best results last.',
+  },
+  {
+    id: 'order',
+    label: 'Order',
+    hint: 'Ten results from across the career, oldest first.',
   },
 ];
 
@@ -67,7 +70,7 @@ export default function CareerPathGame() {
 function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools: Pools | null }) {
   const [choice, setChoice] = usePoolChoice();
   const [event] = useEventMode();
-  const [mode, setMode] = useState<Mode>('order');
+  const [mode, setMode] = useState<Mode>('random');
   const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
   const [dailyOn, setDailyOn] = usePlayMode('career-path');
   const daily = useDailyRound('career-path', {
@@ -215,7 +218,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
 
         <section className="card stack">
           <div className="card__title">
-            {game.mode === 'order' ? 'Career path — oldest first' : 'Career path — random order'}
+            {game.mode === 'order' ? 'Career path — oldest first' : 'Career path — best results last'}
           </div>
           {/*
             One list, start to finish. Ending the round fills in the rest of the

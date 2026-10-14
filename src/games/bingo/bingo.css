@@ -54,6 +54,26 @@
   width: 100%;
   gap: 10px;
 }
+
+/* Timed: the clock draining under the stats, red for the last ten seconds — List's bar. */
+.bingo-timer {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.bingo-timer > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  transition: width 0.1s linear;
+}
+.bingo-timer > .is-low {
+  background: var(--danger);
+}
+.bingo-clock--low {
+  color: var(--danger);
+}
 /* Tenaball's tighter stats: the card is what needs the room. */
 .bingo-play .stat {
   padding: 6px 12px;

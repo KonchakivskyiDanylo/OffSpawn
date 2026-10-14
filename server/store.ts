@@ -52,6 +52,8 @@ export interface Store {
   addPageChange(body: PageChange): Promise<void>;
   /** Oldest first, the ones after id `after` — the updater keeps its own cursor. */
   pageChanges(after: number, limit: number): Promise<Stored<PageChange>[]>;
+  /** Newest first, the ones at or after `since` — how far the data is behind (`data-status.ts`). */
+  pageChangesSince(since: Date, limit: number): Promise<Stored<PageChange>[]>;
   /** One day's daily puzzles, or null if nobody has asked for that day yet. */
   daily(day: string): Promise<DailySet | null>;
   /**
@@ -208,6 +210,14 @@ class PostgresStore implements Store {
     const { rows } = await this.pool.query(
       'select id, at, body from liquipedia_changes where id > $1 order by id limit $2',
       [after, limit],
+    );
+    return rows.map((row) => ({ id: Number(row.id), at: new Date(row.at).toISOString(), body: row.body }));
+  }
+
+  async pageChangesSince(since: Date, limit: number): Promise<Stored<PageChange>[]> {
+    const { rows } = await this.pool.query(
+      'select id, at, body from liquipedia_changes where at >= $1 order by id desc limit $2',
+      [since, limit],
     );
     return rows.map((row) => ({ id: Number(row.id), at: new Date(row.at).toISOString(), body: row.body }));
   }
@@ -383,6 +393,11 @@ class FileStore implements Store {
 
   async pageChanges(after: number, limit: number): Promise<Stored<PageChange>[]> {
     return this.changes.filter((row) => row.id > after).slice(0, limit);
+  }
+
+  async pageChangesSince(since: Date, limit: number): Promise<Stored<PageChange>[]> {
+    const from = since.toISOString();
+    return this.changes.filter((row) => row.at >= from).reverse().slice(0, limit);
   }
 
   async daily(day: string): Promise<DailySet | null> {

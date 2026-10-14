@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { sendStart, useRoundRecorder } from '@/analytics/client';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
@@ -22,6 +23,8 @@ import { poolPlayers } from '@/games/shared/pool';
 import { useLocalState } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
+  BANDS,
+  boardFrom,
   cellKey,
   createGame,
   generateBoard,
@@ -29,6 +32,7 @@ import {
   LEVELS,
   livesLeft,
   place,
+  readGridSpec,
   SIZE,
   solutionFor,
   submit,
@@ -54,29 +58,23 @@ const DIFFICULTIES: LevelOption<Difficulty>[] = [
   {
     id: 'easy',
     label: '🟢 Easy',
-    hint: `Every cell has at least ${LEVELS.easy.answers} names everyone knows. ${LEVELS.easy.lives} lives.`,
+    hint: `${LEVELS.easy.answers} famous answers in every cell. ${LEVELS.easy.lives} lives.`,
   },
   {
     id: 'medium',
     label: '🟡 Medium',
-    hint: `Every cell has at least ${LEVELS.medium.answers} of the scene’s regulars. ${LEVELS.medium.lives} lives.`,
+    hint: `${LEVELS.medium.answers} regulars in every cell. ${LEVELS.medium.lives} lives.`,
   },
   {
     id: 'hard',
     label: '🔴 Hard',
-    hint: 'A cell may have only one answer, and it can be anyone. One wrong answer ends the board.',
+    hint: 'A cell may have just one answer. 1 life.',
   },
 ];
 
 /** Three boards' worth of rules are kept out of the next board. */
 const RECENT_RULES = 3 * 2 * SIZE;
 
-/** The fame bands each level's board is built around, widest last. */
-const BANDS: Record<Difficulty, ('easy' | 'medium' | 'hard')[]> = {
-  easy: ['easy'],
-  medium: ['easy', 'medium'],
-  hard: ['easy', 'medium', 'hard'],
-};
 
 export default function TicTacToeGame() {
   const { roster, error: rosterError } = useRoster();
@@ -126,7 +124,7 @@ function Game({
   const setGame = (next: GameState) => (dailyOn ? daily.setState(next) : setPractice(next));
 
   useRoundRecorder('tic-tac-toe', dailyOn ? daily.endedHere : game !== null && game.status !== 'playing', () => ({
-    title: `Tic Tac Toe — ${game!.difficulty}`,
+    title: `${meta.title} — ${game!.difficulty}`,
     data: facts.generated,
     setup: dailyOn ? { daily: daily.day, level: game!.difficulty } : { event, level: game!.difficulty },
     ...roundRecord(game!),
@@ -170,6 +168,31 @@ function Game({
     sendStart('tic-tac-toe', false);
     setPractice(createGame(board, difficulty));
   }, [answers, accepted, facts, orgs, socials, difficulty, recent, setRecent]);
+
+  /*
+   * A grid from the builder (/analytics/grid), on a dev server only: played as
+   * practice at the level it was checked at, then the address is cleared so
+   * "New board" deals as usual. It waits for the follower counts, which a
+   * "100K+ Twitch" rule needs.
+   */
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (!import.meta.env.DEV || dailyOn) return;
+    const spec = readGridSpec(params.get('grid'));
+    if (!spec) return;
+    const eligible = facts.eligible(3);
+    const band = BANDS[spec.level].flatMap((tier) => roster.exactly(tier, { eligible }));
+    const board = boardFrom({ facts, orgs, socials }, { answers: band, accepted: roster.players }, spec.rows, spec.cols, spec.level);
+    if (!board && socials === null) return;
+    setParams({}, { replace: true });
+    if (!board) {
+      setError('That grid has a rule this level cannot make any more.');
+      return;
+    }
+    setDifficulty(spec.level);
+    setError(null);
+    setPractice(createGame(board, spec.level));
+  }, [params, setParams, dailyOn, facts, orgs, socials, roster]);
 
   const usedIds = useMemo(
     () => new Set(game ? [...game.filled.values()].map((player) => player.id) : []),

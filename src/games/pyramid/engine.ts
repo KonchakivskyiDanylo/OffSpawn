@@ -27,9 +27,10 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
  * `lives` is how many checks that are not perfect it takes to lose — none on
  * Easy, where checking is how you learn the order. `bands` is who can come up.
  * `start` is how far down the ranking the ten may begin — never the long tail
- * of one-off entries at the bottom, which nobody can order — and `gap` how much
- * each money value must drop from the one above it, so no two are a coin flip:
- * wider on Easy, tighter on Hard.
+ * of one-off entries at the bottom, which nobody can order — and `gap` how far
+ * apart two neighbours must be in a share category (money, an average finish),
+ * as a share of the bigger, so no two are a coin flip: wider on Easy, tighter
+ * on Hard.
  */
 export const LEVELS: Record<Difficulty, { lives: number; bands: FameTier[]; start: number; gap: number }> = {
   easy: { lives: Number.POSITIVE_INFINITY, bands: ['easy'], start: 0.25, gap: 0.12 },
@@ -55,34 +56,82 @@ export interface Puzzle {
   title: string;
   /** "Most at the top", "Best finish at the top". */
   direction: string;
+  /** The smallest value is the best — a finish, an age — rather than the biggest. */
+  lowFirst: boolean;
   /** In the right order, best first. */
   items: Item[];
 }
 
 // ------------------------------------------------------------- categories --
 
-interface PlayerCategory {
+export interface PlayerCategory {
   id: string;
   title: string;
-  /** Money drops by a share of itself; a count by at least one. */
-  kind: 'money' | 'count';
+  /**
+   * `share`: each value a share of itself away from the next — money,
+   * followers, an average finish. `count`: one player per value.
+   */
+  kind: 'share' | 'count';
+  /** Smallest at the top: an average finish, an age. */
+  lowFirst?: boolean;
+  /** Under the title; "Most at the top" when not set. */
+  direction?: string;
+  /** Out of the draw for now. The code stays, so dropping the flag brings it back. */
+  hidden?: boolean;
+  /** 0 is "not in this category" — no published birthday, fewer than two Globals. */
   value: (player: RosterPlayer) => number;
   display: (value: number) => string;
 }
 
 const count = (word: string) => (value: number) => `${value} ${word}${value === 1 ? '' : 's'}`;
 
+/** A regional FNCS grand final: online, one per region per round — what an FNCS win counts. */
+const isRegionalFinal = (event: { kind: string; lan: boolean }) => event.kind === 'fncs' && !event.lan;
+
 /**
- * The categories, one per kind. Earnings in a year is one kind with a year
- * drawn inside it, so nine years do not crowd out everything else.
- *
- * LAN wins is on the roadmap and not here: only fifteen players have won one,
- * almost all of them once, so ten players on it would be nearly all tied.
+ * Average finish at the Global Championships, for players with two or more —
+ * one Globals is a single result, not an average. Duos and trios share their
+ * finish, so a pair who played every Globals together share the average too.
  */
-function playerKinds(roster: Roster, facts: Facts, socials: Socials | null): PlayerCategory[][] {
+function globalsAverages(roster: Roster, majors: Majors): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const player of roster.players) {
+    const finishes = majors
+      .resultsFor(player.id)
+      .filter((result) => /Global Championship/.test(result.tournament.name))
+      .map((result) => result.placement);
+    if (finishes.length >= 2) out.set(player.id, finishes.reduce((sum, place) => sum + place, 0) / finishes.length);
+  }
+  return out;
+}
+
+/**
+ * The categories, grouped by kind, hidden ones included. A kind with several
+ * categories draws one inside it — earnings in a year has a year per category
+ * so nine years do not crowd out everything else; FNCS podiums and top 10s
+ * share one, so the FNCS is three kinds in eight rather than four in nine.
+ *
+ * Not here, and why:
+ * - LAN wins: only fifteen players have won one, almost all of them once.
+ * - Majors played: the regional finals plus a handful of LANs, so the same
+ *   order as FNCS grand finals played, give or take one.
+ * - Div Cup finals and wins, Performance Evaluations: `facts.json` has them
+ *   only as lists over a threshold (40+ Div Cup finals and so on), not a count
+ *   per player.
+ * - Teammates: `teammates.json` keeps fifty per player, so every regular is
+ *   level on 50.
+ */
+export function playerCategories(
+  roster: Roster,
+  facts: Facts,
+  socials: Socials | null,
+  majors: Majors | null = null,
+): PlayerCategory[][] {
   const years = [...new Set(roster.players.flatMap((player) => Object.keys(player.earningsByYear)))]
     .map(Number)
     .sort();
+  const regional = new Set(facts.events.filter(isRegionalFinal).map((event) => event.name));
+  const globals = majors ? globalsAverages(roster, majors) : null;
   const kinds: PlayerCategory[][] = [
     [
       {
@@ -94,11 +143,35 @@ function playerKinds(roster: Roster, facts: Facts, socials: Socials | null): Pla
       },
     ],
     [{ id: 'fncs-wins', title: 'FNCS wins', kind: 'count', value: (player) => player.fncsWins, display: count('title') }],
+    // Top 3s and top 10s in a regional final: the same finals an FNCS win counts.
+    [
+      {
+        id: 'fncs-podiums',
+        title: 'FNCS podiums',
+        kind: 'count',
+        value: (player) => facts.of(player.id).podium.filter((index) => isRegionalFinal(facts.events[index])).length,
+        display: count('podium'),
+      },
+      ...(majors
+        ? [
+            {
+              id: 'fncs-top10s',
+              title: 'FNCS top 10s',
+              kind: 'count' as const,
+              value: (player: RosterPlayer) =>
+                majors
+                  .resultsFor(player.id)
+                  .filter((result) => result.placement <= 10 && regional.has(result.tournament.name)).length,
+              display: count('top 10'),
+            },
+          ]
+        : []),
+    ],
     [
       {
         id: 'earnings',
         title: 'Career earnings',
-        kind: 'money',
+        kind: 'share',
         value: (player) => (player.earningsKnown ? player.earnings : 0),
         display: money,
       },
@@ -106,15 +179,42 @@ function playerKinds(roster: Roster, facts: Facts, socials: Socials | null): Pla
     years.map((year) => ({
       id: `earnings:${year}`,
       title: `Earnings in ${year}`,
-      kind: 'money' as const,
+      kind: 'share' as const,
       value: (player: RosterPlayer) => player.earningsByYear[year] ?? 0,
       display: money,
     })),
+    // Whole years, so two players born the same year are level and right either way round.
+    [
+      {
+        id: 'age',
+        title: 'Age',
+        kind: 'count',
+        lowFirst: true,
+        direction: 'Youngest at the top',
+        value: (player) => player.age ?? 0,
+        display: count('year'),
+      },
+    ],
+    globals
+      ? [
+          {
+            id: 'globals-avg',
+            title: 'Average finish at the Globals',
+            kind: 'share' as const,
+            lowFirst: true,
+            direction: 'Best average at the top',
+            value: (player: RosterPlayer) => globals.get(player.id) ?? 0,
+            display: (value: number) => `avg ${Number.isInteger(value) ? value : value.toFixed(1)}`,
+          },
+        ]
+      : [],
     [
       {
         id: 'lan-apps',
         title: 'Major LAN appearances',
         kind: 'count',
+        // The user, 14 Oct 2026: "remove category lan appearances for now".
+        hidden: true,
         value: (player) => facts.of(player.id).lanApps,
         display: count('LAN'),
       },
@@ -123,7 +223,7 @@ function playerKinds(roster: Roster, facts: Facts, socials: Socials | null): Pla
     (socials?.platforms ?? []).map((platform) => ({
       id: `followers:${platform}`,
       title: PLATFORM_META[platform].noun,
-      kind: 'money' as const,
+      kind: 'share' as const,
       value: (player: RosterPlayer) => socials!.of(platform, player) ?? 0,
       display: (value: number) => `${countShort(value)} ${PLATFORM_META[platform].short}`,
     })),
@@ -141,12 +241,13 @@ const FOLLOWER_POOL: Record<Difficulty, number> = { easy: 60, medium: 200, hard:
 /**
  * Ten players from one category, close together in its ranking.
  *
- * Money: rank the level's players, start at a random place in the top `start`
- * share, and walk down, taking the next player whose value is at least `gap`
- * below the last one taken.
+ * Shares (money, followers, an average finish): rank the level's players best
+ * first, start at a random place in the top `start` share, and walk on, taking
+ * the next player whose value is at least `gap` away from the last one taken —
+ * the smaller of the two at most `1 - gap` of the bigger, whichever end is best.
  *
- * Counts (finals, wins, LANs): the same, over the distinct values rather than
- * the players, one player per value. FNCS wins and LANs have fewer than ten
+ * Counts (finals, wins, podiums, age): the same, over the distinct values
+ * rather than the players, one player per value. FNCS wins has fewer than ten
  * values to go round, so when the values run out a second player joins one of
  * them — at most `MAX_LEVEL_PAIRS` times, never three on one value.
  *
@@ -162,11 +263,12 @@ function drawPlayers(
   rng: Rng,
 ): Item[] | null {
   const { start, gap } = LEVELS[difficulty];
+  const better = category.lowFirst ? -1 : 1;
   // Shuffled first, so who stands for a crowded value is a draw, not the alphabet.
   const ranked = shuffle(rng, pool)
     .map((player) => ({ player, value: category.value(player) }))
     .filter((entry) => entry.value > 0)
-    .sort((a, b) => b.value - a.value);
+    .sort((a, b) => better * (b.value - a.value));
   if (ranked.length < SIZE) return null;
   const item = ({ player, value }: (typeof ranked)[number]): Item => ({
     id: player.id,
@@ -176,12 +278,13 @@ function drawPlayers(
   });
   const from = (length: number) => Math.floor(rng() * Math.max(1, Math.floor(length * start)));
 
-  if (category.kind === 'money') {
+  if (category.kind === 'share') {
+    const apart = (a: number, b: number) => Math.min(a, b) <= Math.max(a, b) * (1 - gap);
     for (let attempt = 0; attempt < 12; attempt++) {
       const picked: typeof ranked = [];
       for (let i = from(ranked.length); i < ranked.length && picked.length < SIZE; i++) {
         const last = picked[picked.length - 1];
-        if (!last || ranked[i].value <= last.value * (1 - gap)) picked.push(ranked[i]);
+        if (!last || apart(ranked[i].value, last.value)) picked.push(ranked[i]);
       }
       if (picked.length === SIZE) return picked.map(item);
     }
@@ -289,6 +392,7 @@ function tournamentPuzzle(
       group: 'Tournament',
       title: board.title.replace(/^Top 10 at /, 'Ten finishers at '),
       direction: 'Best finish at the top',
+      lowFirst: true,
       items: drawn,
     };
   }
@@ -297,6 +401,7 @@ function tournamentPuzzle(
     group: 'Tournament',
     title: board.title,
     direction: 'Best finish at the top',
+    lowFirst: true,
     items: board.rows.map((row) => ({
       id: membersOf(row)
         .map((member) => member.key)
@@ -309,12 +414,37 @@ function tournamentPuzzle(
 }
 
 /**
+ * A pyramid on one player category at one level, or null when this draw cannot
+ * make ten. Exported so the checks can try every category on every level.
+ */
+export function playerPuzzle(
+  category: PlayerCategory,
+  roster: Roster,
+  difficulty: Difficulty,
+  rng: Rng,
+): Puzzle | null {
+  const from = category.id.startsWith('followers:')
+    ? [...roster.players].sort((a, b) => category.value(b) - category.value(a)).slice(0, FOLLOWER_POOL[difficulty])
+    : LEVELS[difficulty].bands.flatMap((band) => roster.exactly(band));
+  const items = drawPlayers(category, from, difficulty, rng);
+  if (!items) return null;
+  return {
+    id: category.id,
+    group: 'Players',
+    title: category.title,
+    direction: category.direction ?? 'Most at the top',
+    lowFirst: Boolean(category.lowFirst),
+    items,
+  };
+}
+
+/**
  * A new pyramid.
  *
- * A kind of category first, all kinds equally likely — the five player kinds
- * and tournaments, when `rankings` has loaded — then a category inside it,
- * then the ten. A draw that cannot make ten tries another category rather
- * than showing something lopsided. `avoid` is the last pyramid's category.
+ * A kind of category first, all kinds equally likely — the player kinds that
+ * are not hidden, and tournaments when `rankings` has loaded — then a category
+ * inside it, then the ten. A draw that cannot make ten tries another category
+ * rather than showing something lopsided. `avoid` is the last pyramid's category.
  */
 export function generatePuzzle(
   roster: Roster,
@@ -323,15 +453,15 @@ export function generatePuzzle(
   difficulty: Difficulty,
   seed: string = String(Date.now()),
   avoid: string | null = null,
-  /** Every finish at every major, for tournaments drawn from the whole field. */
+  /** Every finish at every major: tournaments from the whole field, FNCS top 10s, Globals averages. */
   majors: Majors | null = null,
   /** Fresh follower counts, when there are any — `data/socials.ts`. */
   socials: Socials | null = null,
 ): Puzzle | null {
   const rng = makeRng(seed);
-  const level = LEVELS[difficulty];
-  const pool = level.bands.flatMap((band) => roster.exactly(band));
-  const kinds: (PlayerCategory[] | 'tournament')[] = [...playerKinds(roster, facts, socials)];
+  const kinds: (PlayerCategory[] | 'tournament')[] = playerCategories(roster, facts, socials, majors)
+    .map((kind) => kind.filter((category) => !category.hidden))
+    .filter((kind) => kind.length > 0);
   if (rankings) kinds.push('tournament');
   const names = new Map(roster.players.map((player) => [player.id, player.name]));
 
@@ -344,15 +474,8 @@ export function generatePuzzle(
     }
     const category = kind[Math.floor(rng() * kind.length)];
     if (category.id === avoid) continue;
-    const from = category.id.startsWith('followers:')
-      ? [...roster.players]
-          .sort((a, b) => category.value(b) - category.value(a))
-          .slice(0, FOLLOWER_POOL[difficulty])
-      : pool;
-    const items = drawPlayers(category, from, difficulty, rng);
-    if (items) {
-      return { id: category.id, group: 'Players', title: category.title, direction: 'Most at the top', items };
-    }
+    const puzzle = playerPuzzle(category, roster, difficulty, rng);
+    if (puzzle) return puzzle;
   }
   return null;
 }

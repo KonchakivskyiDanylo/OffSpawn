@@ -1,11 +1,12 @@
 import { ref, type GamePayloads, type Outcome } from '@/analytics/types';
-import type { RosterPlayer } from '@/data/liquipedia/roster';
+import type { FameTier, RosterPlayer } from '@/data/liquipedia/roster';
 import { makeRng, type Rng } from '@/lib/rng';
 import {
   buildCriteria,
   hasNestedPair,
   intersect,
   intersects,
+  isNested,
   NEAR_NESTED,
   type CriteriaSource,
   type PlayerCriterion,
@@ -95,6 +96,13 @@ export interface GameState {
 
 export const cellKey = (row: number, col: number) => `${row},${col}`;
 
+/** The fame bands each level's board is built around, widest last. */
+export const BANDS: Record<Difficulty, FameTier[]> = {
+  easy: ['easy'],
+  medium: ['easy', 'medium'],
+  hard: ['easy', 'medium', 'hard'],
+};
+
 /**
  * Builds a board whose every cell has enough answers from the level's fame
  * band AND where all nine cells can be filled with nine *different* players —
@@ -117,7 +125,7 @@ export function generateBoard(
   seed: string = String(Date.now()),
   recent: readonly string[] = [],
 ): Board | null {
-  const pool = boardRules(source, pools);
+  const pool = boardRules(source, pools, difficulty);
   if (pool.length < SIZE * 2) return null;
   const weights = kindWeights(pool);
   const level = LEVELS[difficulty];
@@ -146,9 +154,20 @@ export function generateBoard(
   return null;
 }
 
-/** The rules a board may use, built against the level's fame band. */
-export function boardRules(source: Omit<CriteriaSource, 'players'>, pools: BoardPools): PlayerCriterion[] {
-  return buildCriteria({ ...source, players: pools.answers }, { minMatches: 5, maxShare: 0.45 });
+/**
+ * The rules a board may use, built against the level's fame band. Hard also
+ * draws on the deep rules — Div Cups, Performance Evaluations, a year's prize
+ * money — which the Easy and Medium boards never ask.
+ */
+export function boardRules(
+  source: Omit<CriteriaSource, 'players'>,
+  pools: BoardPools,
+  difficulty?: Difficulty,
+): PlayerCriterion[] {
+  return buildCriteria(
+    { ...source, players: pools.answers, everyone: pools.accepted },
+    { minMatches: 5, maxShare: 0.45, deep: difficulty === 'hard' },
+  );
 }
 
 /**
@@ -160,13 +179,82 @@ export function boardFrom(
   pools: BoardPools,
   rows: readonly string[],
   cols: readonly string[],
+  difficulty?: Difficulty,
 ): Board | null {
-  const byId = new Map(boardRules(source, pools).map((rule) => [rule.id, rule]));
+  const byId = new Map(boardRules(source, pools, difficulty).map((rule) => [rule.id, rule]));
   const axis = (ids: readonly string[]) => ids.map((id) => byId.get(id));
   const [r, c] = [axis(rows), axis(cols)];
   if (r.length !== SIZE || c.length !== SIZE || [...r, ...c].some((rule) => !rule)) return null;
   const board = { rows: r as PlayerCriterion[], cols: c as PlayerCriterion[] };
   return { ...board, candidates: acceptedPerCell(board, pools.accepted) };
+}
+
+/** What the grid builder (`/analytics/grid`) says about a hand-made board. */
+export interface Inspection {
+  /** [row][col]: the level's fame band who fit, biggest earner first. */
+  answers: RosterPlayer[][][];
+  /** [row][col]: everyone the guess box takes who fits. */
+  accepted: number[][];
+  /** The most cells one player fits, and who. */
+  reach: { cells: number; player: string | null };
+  /** Rule pairs where one (nearly) implies the other — `NEAR_NESTED`. */
+  nested: [string, string][];
+  /** Kinds used more than twice. */
+  crowded: string[];
+  /** Whether nine different players can fill it, from the band and from anyone. */
+  distinct: { band: boolean; anyone: boolean };
+  /** Each promise the generator holds a board to at this level, kept or not. */
+  problems: string[];
+}
+
+/**
+ * Checks a board someone chose by hand against everything `generateBoard`
+ * promises at `difficulty`: the answers per cell, the reach cap, no
+ * (near-)nested pair, at most two of a kind, and nine different players. A
+ * board with problems can still be played; the builder says what they are.
+ */
+export function inspectBoard(
+  board: Pick<Board, 'rows' | 'cols'>,
+  pools: BoardPools,
+  difficulty: Difficulty,
+): Inspection {
+  const level = LEVELS[difficulty];
+  const ranked = (players: RosterPlayer[]) => [...players].sort((a, b) => b.earnings - a.earnings);
+  const answers = board.rows.map((row) => board.cols.map((col) => ranked(intersect(row, col))));
+  const everyone = acceptedPerCell(board, pools.accepted);
+
+  const fits = new Map<string, number>();
+  for (const row of board.rows) {
+    for (const col of board.cols) {
+      for (const player of intersect(row, col)) fits.set(player.name, (fits.get(player.name) ?? 0) + 1);
+    }
+  }
+  const [top] = [...fits].sort((a, b) => b[1] - a[1]);
+  const reach = { cells: top?.[1] ?? 0, player: top?.[0] ?? null };
+
+  const all = [...board.rows, ...board.cols];
+  const nested: [string, string][] = [];
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      if (isNested(all[i], all[j], NEAR_NESTED)) nested.push([all[i].short, all[j].short]);
+    }
+  }
+  const kinds = new Map<string, number>();
+  for (const rule of all) kinds.set(rule.kind, (kinds.get(rule.kind) ?? 0) + 1);
+  const crowded = [...kinds].filter(([, n]) => n > 2).map(([kind]) => kind);
+  const distinct = { band: hasDistinctSolution(answers), anyone: hasDistinctSolution(everyone) };
+
+  const problems: string[] = [];
+  const ids = all.map((rule) => rule.id);
+  if (new Set(ids).size < ids.length) problems.push('A rule is used twice.');
+  const thin = answers.flat().filter((cell) => cell.length < level.answers).length;
+  if (thin) problems.push(`${thin} cell${thin === 1 ? ' has' : 's have'} fewer than ${level.answers} answers from this level's players.`);
+  if (reach.cells > level.reach) problems.push(`${reach.player} fits ${reach.cells} cells; this level allows ${level.reach}.`);
+  for (const [a, b] of nested) problems.push(`"${a}" and "${b}" are nearly the same rule.`);
+  for (const kind of crowded) problems.push(`More than two rules of one kind (${kind}).`);
+  if (!distinct.anyone) problems.push('Nine different players cannot fill it.');
+  else if (!distinct.band) problems.push("Nine different players fill it, but not from this level's players alone.");
+  return { answers, accepted: everyone.map((line) => line.map((cell) => cell.length)), reach, nested, crowded, distinct, problems };
 }
 
 /**
@@ -512,4 +600,27 @@ export function record(state: GameState): { outcome: Outcome; r: GamePayloads['t
       mistakes: state.mistakes,
     },
   };
+}
+
+/**
+ * A grid made by hand in the builder (`/analytics/grid`): its six rules by id
+ * and the level it was checked at. The builder's Play link carries one as
+ * `?grid=` on the game's page, on a dev server only.
+ */
+export interface GridSpec {
+  rows: string[];
+  cols: string[];
+  level: Difficulty;
+}
+
+export function readGridSpec(text: string | null): GridSpec | null {
+  if (!text) return null;
+  try {
+    const spec = JSON.parse(text) as Partial<GridSpec>;
+    const ids = (value: unknown) => Array.isArray(value) && value.length === SIZE && value.every((id) => typeof id === 'string');
+    if (!ids(spec.rows) || !ids(spec.cols) || !spec.level || !(spec.level in LEVELS)) return null;
+    return { rows: spec.rows!, cols: spec.cols!, level: spec.level };
+  } catch {
+    return null;
+  }
 }

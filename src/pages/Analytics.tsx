@@ -10,6 +10,8 @@ import { GamePage } from './analytics/GamePage';
 import { Errors, Inbox } from './analytics/Inbox';
 import { Socials } from './analytics/Socials';
 import { Daily } from './analytics/Daily';
+import { Data } from './analytics/Data';
+import { GridBuilder } from './analytics/GridBuilder';
 import { gameTitle } from './analytics/labels';
 import { Overview } from './analytics/Overview';
 import { PlayerPage, Players } from './analytics/Players';
@@ -33,6 +35,8 @@ import './analytics.css';
  *   /analytics/errors          browser errors
  *   /analytics/daily           the daily schedule: reorder, choose, redraw
  *   /analytics/socials         the follower counts and the Twitch login
+ *   /analytics/data            how old the Liquipedia data is, and Update now
+ *   /analytics/grid            build a Tic Tac Toe grid by hand (dev servers only)
  *
  * The range and the filters live in the query string and ride along on every
  * link, so they hold while you move between pages.
@@ -137,8 +141,8 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
   const [showHidden, setShowHidden] = useState(false);
 
   const fresh = (tickets ?? []).filter((ticket) => ticket.status === 'new').length;
-  // The inbox, the daily schedule and the followers page are not filtered by the dashboard's bar.
-  const inbox = /\/analytics\/(support|errors|daily|socials)/.test(pathname);
+  // The inbox, the daily schedule, the followers and data pages and the grid builder are not filtered by the dashboard's bar.
+  const inbox = /\/analytics\/(support|errors|daily|socials|data|grid)/.test(pathname);
   const on = (path: string) => ({ pathname: path, search: search ? `?${search}` : '' });
   const tab = ({ isActive }: { isActive: boolean }) => `an-tab${isActive ? ' is-active' : ''}`;
   // The live games first; the hidden ones behind a toggle, unless one is open.
@@ -188,6 +192,15 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
         <NavLink to={on('/analytics/socials')} className={tab}>
           Followers
         </NavLink>
+        <NavLink to={on('/analytics/data')} className={tab}>
+          Data
+        </NavLink>
+        {/* Dev only until Tic Tac Toe is a daily again; then it belongs in Daily's Choose. */}
+        {import.meta.env.DEV ? (
+          <NavLink to={on('/analytics/grid')} className={tab}>
+            Grid builder
+          </NavLink>
+        ) : null}
         <NavLink to={on('/analytics/support')} className={tab}>
           Support{fresh ? <span className="an-badge">{fresh}</span> : null}
         </NavLink>
@@ -229,6 +242,8 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
         <Route path="errors" element={<Errors errors={errors} />} />
         <Route path="socials" element={<Socials />} />
         <Route path="daily" element={<Daily />} />
+        <Route path="data" element={<Data />} />
+        {import.meta.env.DEV ? <Route path="grid" element={<GridBuilder />} /> : null}
         <Route path="*" element={<Navigate to={on('/analytics')} replace />} />
       </Routes>
     </div>

@@ -18,6 +18,7 @@ import {
   type OutcomeSplit,
 } from './charts';
 import { categoryLabel, eventLabel, gameTitle, pct, regionLabel, words } from './labels';
+import { dayMonthYear } from '@/lib/format';
 import { Card, countItems, DataTable, ShareBars, sourceItems } from './ui';
 
 /**
@@ -52,7 +53,7 @@ export function Overview({ data, pools, loading }: { data: Dashboard | null; poo
 
       <div className="an-grid-2">
         <Card title="Conversion">
-          <Conversion totals={traffic.totals} />
+          <Conversion totals={traffic.totals} since={traffic.countingSince} />
         </Card>
         <Card title="Where visits land">
           <ShareBars items={landing} empty="No visits in this range yet." />
@@ -124,13 +125,28 @@ export function FilterNote({ data }: { data: Dashboard }) {
   );
 }
 
-/** Opens that led to a round, rounds that were finished, rounds that were won. */
-export function Conversion({ totals }: { totals: FunnelTotals }) {
+/**
+ * Opens that led to a round, rounds that were finished, rounds that were won.
+ *
+ * The finish rate sets starts against the rounds finished since starts were
+ * counted (`tracked`), not against every round in the range: before 4 Oct
+ * 2026 rounds were recorded and starts were not, and a 30-day range read
+ * "579 of 487 rounds started".
+ */
+export function Conversion({ totals, since }: { totals: FunnelTotals; since: string }) {
+  const untracked = totals.finished - totals.tracked;
   return (
     <div className="stack">
       <Meter label="Game opens that started a round" part={totals.engaged} whole={totals.opens} note="game opens" />
-      <Meter label="Rounds started that were finished" part={totals.finished} whole={totals.starts} note="rounds started" />
+      <Meter label="Rounds started that were finished" part={totals.tracked} whole={totals.starts} note="rounds started" />
       <Meter label="Rounds finished that were won" part={totals.won} whole={totals.finished} note="rounds finished" />
+      {untracked > 0 ? (
+        <p className="tiny faint" style={{ margin: 0 }}>
+          Starts are counted from {since ? dayMonthYear(since.slice(0, 10)) : 'when the funnel began'}. The{' '}
+          {compact(untracked)} round{untracked === 1 ? '' : 's'} finished before then {untracked === 1 ? 'is' : 'are'}{' '}
+          left out of the finish rate.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -184,8 +200,8 @@ function GamesTable({ data }: { data: Dashboard }) {
         { head: 'Rounds', cell: (row) => compact(t(row)?.finished ?? 0), sort: (row) => t(row)?.finished ?? 0, align: 'right' },
         {
           head: 'Finished',
-          cell: (row) => pct(t(row)?.finished ?? 0, t(row)?.starts ?? 0),
-          sort: (row) => ratio(t(row)?.finished, t(row)?.starts),
+          cell: (row) => pct(t(row)?.tracked ?? 0, t(row)?.starts ?? 0),
+          sort: (row) => ratio(t(row)?.tracked, t(row)?.starts),
           align: 'right',
         },
         {

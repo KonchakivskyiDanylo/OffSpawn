@@ -13,26 +13,26 @@ The site is React, Vite and TypeScript. Every game splits in two: a pure `engine
 | Higher or Lower | Say whether the next player's number is higher or lower. Endless; one mistake ends the run | `higher-lower` |
 | Fortnitedle | Guess a player's handle in six tries, Wordle-style | `wordle` |
 | Career Path | Name the player from ten of their major results | `career-path` |
-| Who Are Ya? | Name the player from the teammates they played with | `who-are-ya` |
+| Ready Up | Name the player from the teammates they played with | `who-are-ya` |
 | Tenite | Name all ten entries on a top-10 board | `tenaball` |
 | List | Name as many answers to a list as you can in 90 seconds | `list` |
 | Griefer | Pick the four to six of ten players who fit a rule | `impostor` |
-| Tic Tac Toe | Fill a 3×3 grid where every cell is a row rule and a column rule | `tic-tac-toe` |
-| Connections | Sort 16 players into four groups of four | `connections` |
+| Box Fight | Fill a 3×3 grid where every cell is a row rule and a column rule | `tic-tac-toe` |
+| Squads | Sort 16 players into four groups of four | `connections` |
 | Guess the Player | Close in on a secret player attribute by attribute, eight guesses | `guess-the-player` |
 | Pyramid | Sort ten players into a 1-2-3-4 pyramid on one category, best at the top | `pyramid` |
 | Bingo | Players are dealt one by one; put each on a 4×4 card of categories or skip, and fill the whole card | `bingo` |
 | Curveball | Name the player from their prize money drawn as a curve, a year at a time | `curveball` |
 | Org Chart | Name the organisation from players who played for it, with dates, join dates or names only | `org-chart` |
 | Contextinho | Find the secret player; every guess is ranked by how alike the two are | `contextinho` |
-| Rewind | Put five to seven moments from competitive Fortnite in order | `rewind` |
+| Rewind | Put seven to ten moments from competitive Fortnite in order | `rewind` |
 | IRL | Name the player behind a real name, their file filled in a line at a time | `irl` |
 | Transfer Window | Name the player from the organisations they have played for | `transfer-window` |
 | Which Lobby? | Name the tournament from its leaderboard, revealed from the bottom up | `which-lobby` |
 
 **Hidden for now: Guess the Player, Connections and Griefer (26 Sep 2026), Pyramid and Bingo (new, 30 Sep 2026), the seven October games (new, 2 Oct 2026 — see their section), and List (4 Oct 2026: too close to Tenite, back in about a month).** A `hidden` flag in the registry takes a game off the home page and the side nav, and the live site sends its address home. A dev server still opens it by URL, and `check:games` still plays it. Guess the Player needs more than it has. Of the three rule-grid games only one is kept, Tic Tac Toe: every board builds at every level and none repeats over 200 deals. Its Easy level is the thin one, with 30 distinct rules, and "won the EU FNCS" and "$1M+ earner" each sit on 41% of Easy boards. Delete the flag to bring a game back.
 
-Three folders keep old names: Fortnitedle lives in `wordle`, Griefer in `impostor` and Tenite in `tenaball` (Tenaball until 13 Oct 2026, the user: "it's a football name"). The ids stay unchanged because best scores, daily progress and the daily schedule are stored under them. The old address, which is the id, is a 301 to the new one (`src/games/moved.ts`, read by the server; the app does the same on a dev server), so `/game/tenaball` in shared results still lands on Tenite.
+Six folders keep old names: Fortnitedle lives in `wordle`, Griefer in `impostor`, Tenite in `tenaball` (Tenaball until 13 Oct 2026, the user: "it's a football name"), and since 14 Oct 2026 Ready Up in `who-are-ya` (Who Are Ya?; the user: "rename it to ready up", not Duo Finder, "because there are trio, squad tournaments as well"), Box Fight in `tic-tac-toe` (Tic Tac Toe) and Squads in `connections` (Connections). The rest of this guide still says Who Are Ya, Tic Tac Toe and Connections in places; they are the same games. The ids stay unchanged because best scores, daily progress and the daily schedule are stored under them. The old address, which is the id, is a 301 to the new one (`src/games/moved.ts`, read by the server; the app does the same on a dev server), so `/game/tenaball` in shared results still lands on Tenite.
 
 How it runs:
 
@@ -43,14 +43,14 @@ How it runs:
 
 ## The data
 
-Every game reads one Liquipedia export in `liquipedia_data/clean_data/fortnite/`, in place, with no build step. Two commands keep it current, and you run both: `scripts/liquipedia_api.py` pulls what changed from Liquipedia into the raw dump, and `scripts/build_data.py` turns the raw dump into every file here (the cleaning, the FNCS titles and tiers, then the derived files). The site never writes that folder.
+Every game reads one Liquipedia export in `liquipedia_data/clean_data/fortnite/`, in place, with no build step. Two commands keep it current, and you run both: `scripts/liquipedia_api.py` pulls what changed from Liquipedia into the raw dump, and `scripts/build_data.py` turns the raw dump into every file here (the cleaning, the FNCS titles and tiers, then the derived files). The site never writes that folder. Since 14 Oct 2026 the same update can run on GitHub Actions instead (`.github/workflows/update-data.yml`): weekly, or from **Update now** on `/analytics/data`, which also shows how old the data is and how many Liquipedia pages changed since. It keeps the raw dump in the Actions cache, commits the new files, and Heroku deploys them. Setup: UPDATE_DATA.md, "Updating from the dashboard".
 
 | File | Holds | Written by | Read by |
 | --- | --- | --- | --- |
 | `players.json` | 5,678 playable rows: handle, aliases, nationalities, region, birthday, career and per-year earnings, status, FNCS wins, fame tier | the upstream notebook | the pipeline |
 | `roster.json` | the same players with only the columns the games read and no empty values: 1.3 MB instead of 3.9 MB, 131 KB with brotli (`scripts/pipeline/site.py`, every build). `check:games` proves it gives the same players field for field | `site.py` | every game (falls back to `players.json` if missing) |
 | `tournaments.json`, `placements.json` | 14,645 tournaments and 442,736 placements (154 MB) | the export | the notebook only |
-| `career_path.json` | 187 majors and every player's finishes in them: 1,175 with five or more, 3,348 in all once cell 7 has run | cell 7 | Career Path, Tenite's Globals boards |
+| `career_path.json` | 187 majors and every player's finishes in them: 1,175 with five or more, 3,348 in all once cell 7 has run | cell 7 | Career Path, Tenite's Globals boards, Rewind's duos |
 | `teammates.json` | each player's 50 most frequent teammates | cell 6 | Who Are Ya, List |
 | `orgs.json` | 979 organisations, with current and past players | the export | Griefer, Tic Tac Toe, Connections, Tenite, List |
 | `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, which headline events they played; plus `season`, every team's finish at the year's big events | notebook appendix | the criteria games, List, Tenite's field boards, FNCS Finals, the glossary |
@@ -108,6 +108,7 @@ Fame tiers come from `players.json`:
 
 - **The mix.** Half Easy, a third Medium, the rest Hard (`RANDOM_MIX`, 50/35/15).
 - **Who uses it.** The four secret-player games deal every round this way. Connections applies the same mix to each group.
+- **Choose → Any too** (14 Oct 2026, the user: "I get a lot of nonames when I play eu any difficulty… I would like it to be similar proportions to just a random mode"). It used to deal evenly, which for Europe was 73% deep cuts. Now it takes the same mix, on the region's own tiers when a region is chosen (`regionTier`), so Easy means well known in that region.
 
 ### Dealing without repeats
 
@@ -137,7 +138,7 @@ On the home page you can swap the whole scene for one tournament's field; today 
 - **Where from:** country and region
 - **Who for:** has played for one of the ten richest organisations
 - **What won:** FNCS winner, 2+ or 3+ FNCS wins, Global, major LAN or major winner, won a region's FNCS, won an FNCS in a given year
-- **Tic Tac Toe only** (their own kinds, so Connections' and Griefer's whitelists leave them out): the exact FNCS count (none, exactly 1, 2 or 3, 4+), won the FNCS back to back, top 3 at a major LAN (35 players), and won an FNCS with a named player — any Easy-tier player with 3+ FNCS-winning partners can be named (23 of them; Peterbot: Cold, Ritual, Pollo, Bylah)
+- **Box Fight only (also Bingo's squares)** (their own kinds, so Connections' and Griefer's whitelists leave them out). Added 14 Oct 2026, the user's picks from a measured list: won a Solo / Duo / Trio / Squad FNCS, won FNCS in 3+ different years, won an FNCS before turning 15 or 16 (age on the day of the final), played the 2019 World Cup (moved here from Bingo), played 3+ Globals. **Deep rules**, built only for Hard boards (`deep` in `CriteriaOptions`; the user: "categories like won a div cup isn't easy, so they could be only in hard"): played 2+ Globals, won a Div Cup (any region and each region), 5+ Div Cup wins, 40+ Performance Evaluations, $100K+ in 2025, $50K+ in 2026, $500K+ in one year, played every FNCS final of 2025 in their region. Left out at the user's word: 40+ Div Cup finals, an FNCS podium but no win, 10+ finals but no win, top 10 at a Globals. Over 60 boards a level, a new rule is on 55 Easy, 44 Medium and 53 Hard boards; the World Cup is on half the Easy ones. Earlier: the exact FNCS count (none, exactly 1, 2 or 3, 4+), won the FNCS back to back, top 3 at a major LAN (35 players), and won an FNCS with a named player — any Easy-tier player with 3+ FNCS-winning partners can be named (23 of them; Peterbot: Cold, Ritual, Pollo, Bylah). A handle more than one player has is named with the country, "Chap (Poland)" (`namedPlayer` in `lib/text.ts`; the user, 14 Oct 2026: "there are a lot of CHAPS, so it should be specified which exactly")
 - **What earned:** $100K, $250K, $500K or $1M+ career earnings
 - **Where played:** at a named Globals or major LAN
 - **The rest:** age (under 18, 20+). There is no active or retired rule: Liquipedia rarely marks a player retired, so "Retired" refused players everyone knows have stopped (removed 28 Sep 2026)
@@ -253,7 +254,7 @@ You name a secret player from their results at majors, revealed one at a time: u
 - **Clues and guesses.** A wrong guess reveals the next clue, and running out of clues loses. The score is how many clues you needed.
 - **Who can be the answer:** 1,175 players with at least five majors on record. In event mode it is anyone in the field with a major at all: all 101 at the 2026 Globals once cell 7 has run, against 79 before.
 - **Five guesses at least.** A career shorter than five majors still gets five guesses (`MIN_GUESSES`). The ones after its last clue reveal nothing new.
-- **Modes.** Order reads the ten oldest first, as a career arc. Random shows the same kind of ten in no order.
+- **Modes.** Random (the default since 14 Oct 2026) builds up: the ten in any year order, from the least telling result to the most (`telling` in the engine: the finish on a log scale, plus up to half for the stage), give or take `RAMP_JITTER` so close results can swap but a 43rd never follows a top 10. The user: "later places give you much more information… no top 43 in last guess, but like top 5". The last clue is now a top 3 in 39% of hands and a top 10 in 72% (median 5th); a plain shuffle gave 10%, 29% and 18th. Order reads the ten oldest first, as a career arc. The daily, when it comes back, uses Random.
 
 ### How the ten are chosen
 
@@ -278,7 +279,7 @@ The clues are picked one at a time. Each unused result is scored on what it woul
 
 **After the round** the rest of the ten turn face up, dimmed, so you can see what was coming next.
 
-## Who Are Ya?
+## Ready Up (was Who Are Ya?)
 
 You name a secret player from the people they have played tournaments with, revealed one at a time. You may guess after every clue, and the round ends on a correct guess or when the clues run out.
 
@@ -478,7 +479,7 @@ The confirm step exists because a mis-tap on a phone used to end the round outri
 
 **The dashboard counts misreadings.** Analytics record every card and whether it was picked, so the dashboard shows which rules and which players get misread.
 
-## Tic Tac Toe
+## Box Fight (was Tic Tac Toe)
 
 A 3×3 grid has a rule on each row and each column; every cell needs one player who fits both. You don't pick the cell: you type a player and the grid works out where they go. Each player can be used once.
 
@@ -503,6 +504,10 @@ At every level any player who fits is accepted. The level decides what the board
 
 If no board passes, the promises give way one at a time: recent rules, then redundant-looking axes, then the cap, and last the answers per cell.
 
+### Building a grid by hand
+
+`/analytics/grid` on a dev server (the user, 14 Oct 2026: "a real tic tac toe board creation in analytics… for now maybe just in dev mode, in the future when I add daily I would add it in there"). Pick a level and three rows and three columns from the rules that level's boards draw on (`boardRules`); each cell shows its answers from the level's players, everyone who fits, and the best-known three. `inspectBoard` in the engine holds the grid to every promise `generateBoard` makes at that level — answers per cell, the reach cap, no near-nested pair, two of a kind at most, nine different players — and lists what it breaks. **Random grid** starts from a generated one. **Play it** opens the game on that grid (`?grid=`, dev only, read by `readGridSpec`). **Save** keeps it in this browser (`dev:grids`), and **Copy** gives the six rule ids, which is exactly a Tic Tac Toe daily's descriptor, for when the game is a daily again.
+
 ### Where a typed player lands
 
 The grid only offers a cell that leaves every other empty cell still fillable with players not yet used, so a move can never soft-lock the board.
@@ -515,7 +520,7 @@ The grid only offers a cell that leaves every other empty cell still fillable wi
 
 A player who fits always has at least one safe cell, by construction. If you lose, each empty cell shows three answers you could have used: its biggest earners, since those are the ones you should have known.
 
-## Connections
+## Squads (was Connections)
 
 Sixteen players, four hidden groups of four: select four and submit. You have four lives, shown as hearts. A wrong guess with three of the four right says so; anything less says nothing, because two-of-four happens by chance on most guesses.
 
@@ -549,34 +554,89 @@ Birth year came off the list because nobody can tell a 2005 from a 2006 across f
 
 Known gaps: most single-region pools (Asia, Oceania, several Hard tiers) cannot build a board, before and after the rebuild. South America Easy and Medium went from 4 in 10 to none: that pool has only five usable rules.
 
+**On screen:** one column, 600px at most, holds everything in play — the stats, the solved rows, the sixteen tiles and the buttons — so nothing is wider than the board (the user, 14 Oct 2026: "The board is so tiny, but other buttons are so big in comparison"). Each tile is a quarter of the column, wider than tall: 144 × 84 at the cap, 64 tall on a phone. A solved group takes a row's place at the same height. Tile text scales with the column (container units), a size smaller for handles of eleven characters and up, and breaks inside a handle only when it has to.
+
 ## Pyramid
 
 Ten players and one category; sort them into a pyramid of 1, 2, 3 and 4, best at the top, and check. Everything in place turns green and locks; the rest is red until moved. Tap two to swap, or drag one onto another (pointer events, so it works on a phone).
 
 | Level | Who | Values | Checks |
 | --- | --- | --- | --- |
-| Easy | the Easy tier | start in the top quarter of the ranking; money at least 12% apart | unlimited |
+| Easy | the Easy tier | start in the top quarter of the ranking; money and averages at least 12% apart | unlimited |
 | Medium | Easy + Medium tiers | top third; 6% apart | 2 lives |
 | Hard | everyone | top half; 3% apart | 1 life |
 
-- **Categories:** FNCS grand finals played, FNCS wins, career earnings, earnings in a year, LAN appearances, and ten finishers at one tournament (the events of Tenite's tournament boards: the LANs on Easy, plus EU/NA finals since 2024 on Medium, every final on Hard; on a duos event each item is the team). The ten are drawn at random from the event's results in `career_path.json` (the user, 1 Oct 2026: not always the top ten): from the top 20 on Easy, the top 30 on Medium, anywhere on Hard, and only places whose whole team is on the roster. Without that file, the top ten. Each kind is equally likely.
-- **Close but orderable:** money walks down the ranking taking the next player at least the level's gap below the last. Counts take one player per distinct value; FNCS wins and LANs have fewer than ten values, so up to three pairs share a value.
+**Categories.** A kind first, each equally likely, then a category inside it (`playerCategories` in the engine):
+
+| Kind | Category | At the top |
+| --- | --- | --- |
+| FNCS finals | FNCS grand finals played | most |
+| FNCS wins | FNCS wins | most |
+| FNCS finishes | FNCS podiums (top 3) or FNCS top 10s, in a regional final — the finals an FNCS win counts | most |
+| Earnings | career earnings | most |
+| Earnings in a year | one year, 2018 to now | most |
+| Age | in whole years; no birthday, not in it | youngest |
+| Globals | average finish at the Global Championships, for players with two or more | best average |
+| Followers | Twitch or YouTube, while the server has fresh counts | most |
+| Tournament | ten finishers at one event | best finish |
+
+- **Tournaments:** the events of Tenite's tournament boards — the LANs on Easy, plus EU/NA finals since 2024 on Medium, every final on Hard; on a duos event each item is the team. The ten are drawn at random from the event's results in `career_path.json` (the user, 1 Oct 2026: not always the top ten): from the top 20 on Easy, the top 30 on Medium, anywhere on Hard, and only places whose whole team is on the roster. Without that file, the top ten.
+- **From `career_path.json`:** FNCS top 10s and the Globals average. The game loads it after the first paint; until it is there, they are not drawn.
+- **Hidden:** LAN appearances (the user, 14 Oct 2026: "remove category lan appearances for now"). Its code stays behind `hidden: true`; `check:games` fails if it is drawn, or if the flag goes.
+- **Close but orderable:** money, followers and the Globals average walk the ranking from the best end, taking the next player at least the level's gap from the last. Counts (age included) take one player per distinct value; FNCS wins has fewer than ten values, so up to three pairs share a value.
 - **Ties:** players level on a value are right either way round.
-- **Left out:** LAN wins — fifteen players have one, nearly all exactly one.
+
+The categories added on 14 Oct 2026, measured on the export of 13 Oct (`check:games` builds every category 20 of 20 on every level):
+
+| Category | Easy: players, values | Medium | Hard | Built of 200, each level | Level pairs per pyramid, Easy / Medium / Hard |
+| --- | --- | --- | --- | --- | --- |
+| FNCS podiums | 92, 11 | 448, 12 | 569, 12 | 200 | 0 / 0.3 / 1.0 |
+| FNCS top 10s | 105, 18 | 712, 19 | 1,403, 19 | 200 | none |
+| Age | 108, 16 | 876, 26 | 3,037, 30 | 200 | none |
+| Globals average | 49, 41 | 107, 72 | 107, 72 | 200 | none (never level) |
+
+**Left out:**
+
+- LAN wins: fifteen players have one, nearly all exactly one.
+- Majors played: the regional finals plus a handful of LANs, so the same order as FNCS grand finals played, give or take one.
+- Div Cup finals and wins, Performance Evaluations: `facts.json` has them only as lists over a threshold (40+ Div Cup finals and so on), not a count per player.
+- Teammates: `teammates.json` keeps fifty per player, so every regular is level on 50.
+- Earnings in the latest year: already one of the years in "earnings in a year".
 
 ## Bingo
 
-A 4×4 card of categories and a deck of players dealt one at a time: tap a square the player on show fits, or skip them. The aim is the full card (the user, 30 Sep 2026: "the aim is to solve full bingo"); lines are only progress. A player on a square they do not fit costs a life and that player; skipping is free.
+A 4×4 card of categories and players dealt one at a time: tap a square the player on show fits, or skip them. The aim is the full card (the user, 30 Sep 2026: "the aim is to solve full bingo"); lines are only progress. A player on a square they do not fit costs a life and that player; skipping is free.
 
-| Level | Deck | Dealt from | Every square has in the deck | Lives |
-| --- | --- | --- | --- | --- |
-| Easy | 50 | the Easy tier | 3 players | 3 |
-| Medium | 45 | Easy + Medium | 2 | 3 |
-| Hard | 40 | everyone | 2 | 2 |
+Three modes (the user, 14 Oct 2026: "2 modes. One is which is now with amount of players, second is with time … And maybe even no timer"), on the same cards, levels and lives:
 
-- **The deck:** players until every square is covered that many times, then anyone from the band — some fit nothing and are there to be skipped (about 3 per Easy deck, 10 on Medium and Hard). It is kept only if a full card is possible and stays possible with any one player removed, so no single player is the only way to a square.
+| Mode | The players | The round is lost when | Best (lower wins) |
+| --- | --- | --- | --- |
+| Deck | a fixed deck, each player once | the deck is done or the lives are gone | fewest players to a full card |
+| Timed | drawn from the level's band, until the clock runs out | the clock runs out or the lives are gone | fewest seconds |
+| Endless | the same stream, no clock | the lives are gone | fewest players |
+
+| Level | Dealt from | Deck | Clock | Every square has in the deck | Lives |
+| --- | --- | --- | --- | --- | --- |
+| Easy | the Easy tier | 40 | 2:00 | 3 players | 3 |
+| Medium | Easy + Medium | 35 | 1:30 | 2 | 3 |
+| Hard | everyone | 30 | 1:00 | 2 | 2 |
+
+- **Sizes and clocks:** the user, 14 Oct 2026: "Decrease players, so have like 40-35-30" (they were 50, 45, 40) and "60-90-120" seconds, read as the easier level getting the longer clock — Hard's unknown names come with the least time.
+- **The deck:** players until every square is covered that many times, then anyone from the band — some fit nothing and are there to be skipped (about 1.4 per Easy deck, 5 on Medium, 4 on Hard). It is kept only if a full card is possible and stays possible with any one player removed, so no single player is the only way to a square. The covering alone takes 19–28 players, so even Hard's 30 has room: 25 of 25 seeds build on every level, guarantees unchanged.
+- **The stream (Timed, Endless):** each player is drawn from the level's band, never the one just shown. Anyone else can come back, and go on another square they fit — on Hard a square may have only two answers in the band, so ruling out players already on the card could leave it impossible. The draw leans towards the open squares (the user: "when there is 1 category left, the players who fit are much more likely to be there"): at least 0.75 / ∛open of the stream fits one, or the band's own share when that is higher. A fitting player is drawn square-first, an open square at random and then someone who fits it, so a square with three answers is fed as often as one with three hundred.
+
+  | Open squares | 1 | 2 | 4 | 8 | 16 |
+  | --- | --- | --- | --- | --- | --- |
+  | Fit an open square, at least | 75% | 60% | 47% | 38% | 30% |
+
+  Never all, so a skip is still a decision. Measured by `check:games`: 74–75% with one open on every level. A good player (each fit on its scarcest square, the rest skipped, nothing wrong) fills the card in a median 21 players on Easy (18–25), 34 on Medium (27–59) and 39 on Hard (26–50) — six seconds a player on Easy's clock, two and a half on Medium's, a second and a half on Hard's.
+- **Lives** are the same in every mode: in a stream that never runs dry they are what stops tapping squares at random from being free.
+- **The clock** is the component's: a start time read ten times a second and before every move. The engine is told the time (`tick`) and ends a Timed round when it is up, so it stays pure and a tap after the clock ran out is refused.
+- **Best:** per mode and level on the device (`best:bingo:<mode>:<level>`), set only by a full card.
+- **Analytics:** `setup.mode` is `deck`, `timed` or `endless`; the payload keeps its shape, with `deck: 0` for a stream.
 
 - **Squares:** Tic Tac Toe's categories plus Bingo's own: FNCS finals played (1+, 2+, 10+), played for 3+ organisations, FNCS finals in 2+ regions, played the World Cup, won FNCS with 2+ teammates, and 10+ tournaments with a famous player (complete at 10 — the teammates file keeps each player's top 50).
+- **Which Chap:** "10+ events with X" names X with `namedPlayer`, judged against the whole roster rather than the level's band: three players are called Chap (the user, 14 Oct 2026: "it should be specified which exactly"), so the square reads "10+ events with Chap (United States)". Eight anchors say which: aqua, Chap, Cold, Cooper, Deyy, K1nG, Rapid and Rise. The shared "Won FNCS with X" judges against the band, so "Won FNCS with Cold" (Medium, Hard) and "Won FNCS with K1nG" (Medium) stay bare: the other Cold and K1nG are not in those bands. `check:games` notes them.
 - **How a card is drawn:** weighted by kind like Tic Tac Toe, at most two of a kind, no two nearly the same, and no player fitting more than 5 squares (one name used to fit 7–10).
 - **Not possible from the export:** "is a controller player" (no input device in the data) and "was in a trio with X" (teammates are not split by mode).
 
@@ -593,50 +653,91 @@ Seven games added on 2 October 2026 from the user's roadmaps, all `hidden` in th
 | Curveball | Name the player from their prize money drawn as a curve, a year at a time | `curveball` |
 | Org Chart | Name the organisation from players who played for it | `org-chart` |
 | Contextinho | Find the secret player; every guess is ranked by how alike it is | `contextinho` |
-| Rewind | Put five to seven moments in order, oldest first | `rewind` |
+| Rewind | Put seven to ten moments in order, oldest first | `rewind` |
 | IRL | Name the player behind a real name, their file filled in a line at a time | `irl` |
 | Transfer Window | Name the player from the organisations they have played for | `transfer-window` |
 | Which Lobby? | Name the tournament from its leaderboard, filled from the bottom up | `which-lobby` |
 
 ### Curveball
 
-The curve runs from the first year with prize money to the last, empty years in between included (they sit on the floor). It needs three years with money: 108 Easy players, 962 up to Medium, 3,867 in all. A curve under five years still gets five guesses.
+The curve runs from the first year with prize money to the last, empty years in between included (they sit on the floor). It needs three years with money: 108 Easy players, 965 up to Medium, 3,873 in all. A curve under five years still gets five guesses.
 
 - **One curve: earnings**, that year's prize money. The roadmap's "PR curve" is not possible — PR is Fortnite Tracker's power ranking and the export has none — and a world rank by prize money that stood in for it was dropped (the user, 2 Oct 2026).
-- **The axis is fixed** — $100 to $5M on a log scale — so its range never gives away how high the curve goes. The year labels are question marks until revealed, and the span only shows once the round is over.
+- **The axis is fixed**, so its range never gives away how high the curve goes: a cube-root scale from $0 to $1M, and $1M–$5M squeezed into the top tenth (only 11 years on record pass $1M, ten of them the 2019 World Cup). It was a log scale from $100 to $5M, on which $500K and $600K stood 4 pixels apart; they are 11 apart now (the user, 14 Oct 2026: "500k and 600k are completely similar"). A square root would part them further but flatten the small earners: on the cube root a $1K year still sits a tenth of the way up, and Hard's typical curve peaks at a sixth of the height (`AXIS`, `heightOf`). The year labels are question marks until revealed, and the span only shows once the round is over.
 
 ### Org Chart
 
-The pool is the organisations with a team page and five roster players, richest first: the top 25 on Easy, 75 on Medium, all 379 on Hard. Up to seven players are clues: the two best-known by career earnings (never in the first three clues), three of the next ten, and two from anyone. The org's region comes after the third player, the year it was founded after the fifth (`founded`, new in orgs.json), its prize money last.
+The pool is the organisations with a team page and five roster players, richest first: the top 25 on Easy, 75 on Medium, all 392 on Hard. Up to eight players are clues (seven until the user's "increase it to eight if there is enough", 14 Oct 2026): the two best-known by career earnings (never in the first three clues), three of the next ten, and three from anyone. Eight is a full hand for 23 of Easy's 25 orgs, 65 of Medium's 75 and 306 of Hard's 392. The org's region comes after the third player, the year it was founded after the sixth or the last (`founded`, new in orgs.json), its prize money last.
 
 - **Clues**: Full dates (joined – left, "now" for a current player), Joined, Names only. Dates need `bios.json`.
 - The guess box offers every org with a team page, not just the level's.
 
 ### Contextinho
 
-Every guess is ranked against the secret out of all 5,689 players, the secret #1. Similarity is a weighted sum of parts, each 0–1 (`rankAll`):
+Every guess is ranked against the secret out of all 5,689 players, the secret #1. Similarity is a weighted sum of parts, each 0–1 (`rankAll`). The defaults are the user's own mix from the lab (14 Oct 2026: played together 5, country 2, age 1.5, region 1, shared teammates 1, same years 2, same organisations 2 — "Something like that") plus three parts asked for the same day:
 
 | Part | Default weight | 1 means |
 | --- | --- | --- |
-| Played together | 4 | 40+ tournaments as teammates (log scale) |
-| Country | 2 | same first nationality |
+| Played together | 5 | 40+ tournaments as teammates (log scale) |
+| FNCS wins together | 4 | two regional FNCS titles won on the same team; one scores 0.7 |
+| Big events together | 4 | teammates at two major LANs, or on the podium of one; once scores 0.7 |
+| Country | 2 | same first nationality; a neighbour in the same scene 0.5 |
 | Age | 1.5 | same birthday; two years apart scores about a third; unknown 0.3 |
 | Region | 1 | same region |
-| Shared teammates, same years, career earnings, same organisations, FNCS wins | 0 | off by default, for trying |
+| Shared teammates | 1 | the two top-50 teammate lists overlap by a third |
+| Same years | 2 | prize money in exactly the same years |
+| Same tournaments | 1.5 | majors both played ÷ the shorter career, counted as at least 10 |
+| Same organisations | 2 | two organisations in common |
+| Career earnings, FNCS wins | 0 | off, for trying |
 
-Ties go to the bigger career earner. On Easy the secret's top teammate ranks #3.8 on average. A hint names a player halfway between your best rank and #1. **The similarity lab** (dev builds only) has a slider per part, Rank or 0–100 display, the parts on every row and a peek at the ten closest — the roadmap's V1 is about finding the right weights, so they are knobs rather than constants.
+- **FNCS wins together** — "if they win together it should be a really big clue" — counts titles per partner from `facts.json` (`Facts.fncsTitlesWith`).
+- **Big events together** are the major LANs (`Facts.headlineEvents`: the World Cup, the Globals, the 2022 Invitational, the Summit, the Reload Elite final) — "if the players played together world cup it should give them a lot of points". A team is everyone who finished in one place (`Majors.finishers`); a place two teams tied for is skipped. A podium counts twice, so Aqua's World Cup partner Nyhrox is #3 for him rather than #4.
+- **Same tournaments** is lobbies rather than years ("some eu player plays fncs and I name another player from eu, they could have played in the same lobby a lot"): the regional grand finals and LANs of `career_path.json`. Dividing by the shorter career lets a short one score fully if it was all spent in the secret's finals; the floor of 10 keeps one shared final out of one at 0.1. 10 measured better than 5 or 15.
+- **Country** is no longer all-or-nothing ("in eu, especially in countries with a small amount of players there could be a problem"). The scenes, hand-made in the engine: UK & Ireland, the Nordics, DACH, Benelux, Iberia, Italy & Malta, the Baltics, Central Europe (Poland, Czechia, Slovakia, Hungary), the Balkans (with Greece, Romania, Bulgaria), Eastern Europe & CIS, US & Canada, Spanish-speaking America & the Caribbean, the Gulf, the Levant, Iraq & North Africa, Oceania, Greater China, Southeast Asia, South Asia, Sub-Saharan Africa. France, Brazil, Japan, South Korea, Turkey, Israel and Iran stand alone. There is no same-continent step: `region` is read off nationality, so it already is one.
+
+Measured over all 109 Easy secrets:
+
+| | Old defaults | The user's mix, old parts | Now |
+| --- | --- | --- | --- |
+| Top teammate, average rank | #12.3 | #6.6 | #3.1 |
+| FNCS-winning partners in the top 10 | 77% | 85% | 99% (worst #17) |
+| Big-event partners in the top 10 | 68% | 73% | 95% |
+| A regular of the secret's finals, never a teammate (median) | #425 | #180 | #73 |
+| A neighbour of a small-country secret (median) | #879 | #1015 | #295 |
+| A random same-region stranger in the top 25 | 1% | 0% | 0% |
+
+`check:games` holds every Easy secret to it: an FNCS partner in the top 25 (two titles, top 10), a full big-events partner in the top 10, nobody the secret never teamed with in the top 3. Ties go to the bigger career earner. A hint names a player halfway between your best rank and #1. The round waits for orgs, facts and majors to load or fail, so a late file cannot re-rank the guesses. **The similarity lab** (dev builds only) has a slider per part, Rank or 0–100 display, the parts on every row and a peek at the ten closest — the roadmap's V1 is about finding the right weights, so they are knobs rather than constants.
 
 ### Rewind
 
-1,700 moments with a date and no year in their words (446 before `bios.json` and the founding dates are built): who won each LAN ("Cooper & Mero win the Global Championship"), an FNCS season's grand finals (seasons whose names carry no year), a player's first or later FNCS title, a signing at one of the 60 richest orgs (needs `bios.json`), an org founded since 2017.
+17,704 moments with a date and no year in their words, in twelve kinds — widened on 14 Oct 2026 (the user: "Needs more categories, without it not really interesting. Maybe also like famous players first earnings. Or first fncs finals"):
+
+| Kind | Example | Moments | Dated by |
+| --- | --- | --- | --- |
+| LAN win | "Cooper & Mero win the Global Championship" | 9 | the event |
+| FNCS round | "The FNCS C2S1 grand finals", for seasons whose names carry no year | 16 | the round's first final |
+| First / later FNCS title | "Peterbot’s first FNCS title", "Pollo’s 2nd FNCS title" | 247 / 175 | the final won |
+| First FNCS final | "Bugha’s first FNCS final" — the finals the glossary's "FNCS grand finals played" counts | 3,318 | that final |
+| Duo | "Bugha & Mero’s first FNCS final together", pairs with 3+ finals side by side (needs `career_path.json`) | 746 | that final |
+| First prize money | "Bugha’s first prize money" | 5,695 | the year |
+| Best year | "Bugha’s best year for prize money", careers of two years or more | 5,048 | the year |
+| Org's first FNCS title | "NRG’s first FNCS title": the first regional final won by a player with the org that day (needs `bios.json`) | 39 | that final |
+| Signing / departure | "Bugha joins Sentinels" / "Bugha leaves Sentinels", at the 60 richest orgs (needs `bios.json`) | 1,188 / 1,173 | the stint |
+| Founded | "Gentle Mates is founded", orgs founded since 2017 | 50 | the team page |
+
+Prize money is recorded per calendar year, so those two kinds are dated by the year (`wholeYear`): the card shows "2019" once locked, and the gap is kept from the whole year, so nothing else in the deal falls inside it and the order stays exact. The game waits for `orgs.json` and `career_path.json` to load or fail before it deals.
+
+Not added, because the data cannot date them well: a first Global Championship (49 of the 57 Easy players' first was 2023 — one date), a biggest single payday (only 20 players have paydays boards, and those name the event without a date), a first Div Cup win (the Div Cup lists are undated), a first LAN (the export holds only Epic's headline LANs, so a DreamHack would be missed).
 
 | Level | Moments | At least apart | From | Checks |
 | --- | --- | --- | --- | --- |
-| Easy | 5 | 150 days | Easy-tier players, LAN wins, top-20 orgs | unlimited |
-| Medium | 6 | 60 days | + Medium, FNCS seasons, later titles | 2 lives |
-| Hard | 7 | 21 days | everyone | 1 life |
+| Easy | 7 | 180 days | Easy-tier players, LAN wins, top-20 orgs; no later titles or FNCS rounds | unlimited |
+| Medium | 8 | 75 days | + Medium, FNCS rounds, later titles | 2 lives |
+| Hard | 10 | 30 days | everyone | 1 life |
 
-At most two of a kind (more when the pile has few kinds) and two about one player. The check is Pyramid's: right places lock green and show their date; tap two to swap, drag, or the arrows.
+7, 8 and 10 are the user's ("maybe overall more events, like 7-8-10"). The gaps are a little wider than the old 5/6/7 deals had (150, 60, 21 days); each level deals 2,000 seeds out of 2,000 and starts failing only far wider (Easy around 450 days, Medium 365, Hard past 180).
+
+At most two of a kind (more when the pile has few kinds), two about one player or org, and two prize-money years. The check is Pyramid's: right places lock green and show their date; tap two to swap, drag, or the arrows. A card is one line, about 42px, with its arrows side by side (30px; 38px on a touch screen) and the date in their place once locked, so Hard's ten fit a laptop screen (the user: "make it smaller, because it's too big").
 
 ### IRL
 
@@ -651,8 +752,10 @@ Players with three or more organisations: 81 Easy, 594 to Medium, 2,009 in all (
 
 ### Which Lobby?
 
-186 majors, read as rounds and regions off their names (`games/shared/lobbies.ts`: "FNCS 2023 - Major 2: Europe - Grand Finals" is 2023's Major 2, Europe). The leaderboard reveals one finisher per band, bottom up — the back half, then closer each time, 2nd–3rd, the winner — six or seven per lobby, every finisher a whole team on the roster.
+186 majors, read as rounds and regions off their names (`games/shared/lobbies.ts`: "FNCS 2023 - Major 2: Europe - Grand Finals" is 2023's Major 2, Europe). The leaderboard reveals one finisher per band of its top 20, bottom up — 17th–20th, 13th–16th, 9th–12th, 6th–8th, 4th–5th, 2nd–3rd, the winner — seven per lobby (six for the four with a band and no whole team in it).
 
+- **The same top 20 everywhere** (`CUT`, `BANDS`): the smallest field on record is 22, so every lobby reaches 20th. The reveal used to start in the back half, and the last place it printed named the event — "39th" could only be the Reload Elite Series at the Esports World Cup (the user, 14 Oct 2026: "Don't write down to 50, it can be a spoiler").
+- **Whole teams only** (`wholeTeams`): a finisher must be exactly its format's team size, every player on the roster. `career_path.json` lists only players with a page, so a duo whose partner has none came back as one player (FNCS 2023 Major 1 Europe's 36th, Brandtman & Moneymaker, read "Moneymaker"); and a shared place reads as its best end, so two duos tied 35–36 at the Reload Elite Series were one team of four. It showed in 14% of Medium rounds and a third of Hard ones (the user: "1 player and duos"). The two Oceania finals that list two teams at 1st (2023 Major 3, 2025 Major 1) end on 2nd–3rd.
 - **Guessing** is three taps: year, round, region. A wrong guess says whether the lobby was earlier or later and whether the region was right.
 - **Levels**: Easy deals the LANs and the Europe and NA East / North America / NA Central finals (61), with the best-known finisher in each band; Medium adds NA West and Brazil (108); Hard everything (186), anyone in the results.
 
@@ -704,7 +807,7 @@ Opens and starts go to `POST /api/funnel` and are kept in the `funnel` table as 
 
 ### The dashboard
 
-`/analytics` is linked from nowhere and computed live from the stored rounds and funnel counts on every load (`aggregate.ts`, `traffic()` for the funnel). It has a page per question (`src/pages/analytics/`):
+`/analytics` is linked from nowhere and computed live from the stored rounds and funnel counts on every load (`aggregate.ts`, `traffic()` for the funnel). Rounds were recorded from the launch and starts only from 4 Oct 2026, so a range reaching back before that read "579 of 487 rounds started"; the finish rate now sets starts against `tracked`, the rounds finished since the first funnel count, and says how many it leaves out. It has a page per question (`src/pages/analytics/`):
 
 | Page | Shows |
 | --- | --- |
@@ -713,6 +816,8 @@ Opens and starts go to `POST /api/funnel` and are kept in the `funnel` table as 
 | `/analytics/players` | a search over every player the rounds mention |
 | `/analytics/players/<id>` | one player across every game: what they were (the secret, a card, an answer, a tile…), how often, how often people got them right, and their latest appearances |
 | `/analytics/support`, `/errors` | the inbox, with status tabs and a search, and the error table |
+| `/analytics/data` | how old the Liquipedia data is (the export date and the files' own), how many Fortnite pages the webhook says changed since, and **Update now** (`server/data-status.ts`) — see below |
+| `/analytics/grid` | dev servers only: the Tic Tac Toe grid builder — see Tic Tac Toe |
 
 **The charts** (`src/pages/analytics/charts.tsx`) are hand-drawn SVG and HTML, no library: thin marks, hairline axes, a legend for two or more series, hover and keyboard on every chart, and an "As a table" view under each. Their colours are the `--viz-*` tokens in `analytics.css`, one set per theme, checked for colour-blind separation and contrast against the site's own surfaces. The funnel numbers follow only the range, the game and daily-or-not: an open or a start does not know a round's region, level or outcome, so those filters narrow the tables and the page says so.
 
@@ -776,11 +881,11 @@ It plays every game with a perfect player, generating the random games many time
   - Higher or Lower's region lean shows more regions than without it.
 - **Definitions:** the matcher explains the right terms for tricky titles, and the LAN list names every LAN.
 - **Fortnitedle:** three guesses into a digit answer, every difficulty, Random and the daily say there is a digit, with no digit or # shown and no key coloured; two guesses in, nothing.
-- **Career Path:** a two-clue round lasts exactly five wrong guesses, a ten-clue round ten, and giving up is never recorded as running out.
+- **Career Path:** a two-clue round lasts exactly five wrong guesses, a ten-clue round ten, and giving up is never recorded as running out. Random builds up for every answerable player: no clue comes before one less telling by more than `RAMP_JITTER`.
 - **Who Are Ya:** the number one teammate is last in the ramped orders and never in Random's first four; a two-clue hand lasts five wrong guesses.
 - **Whole field:** every secret-player game deals all of an event field that its data allows, and Griefer, Connections and Tic Tac Toe build boards from the whole field.
 - **Analytics:** one real round per game, recorded and aggregated the way the dashboard reads it; the filters narrow every table, and the player view finds its player.
-- **Daily puzzles:** midnight in Berlin on both sides of a clock change; 30 days in a row each with all six built dailies (served or not), no secret player, board or list twice, no kind of board or list on days 2 apart or board family 7 apart, no board on active status, three different secrets a day, all well known; every puzzle rebuilds, a saved round comes back, and the answer wins. The archive: a day's round survives the next day starting, a late day is saved beside it, and a late day counts as played but not towards the streak. `check:server` asks the endpoint for today twice and gets the same set.
+- **Daily puzzles:** midnight in Berlin on both sides of a clock change; 30 days in a row each with all six built dailies (served or not), no secret player, board or list twice, no kind of board or list on days 2 apart or board family 7 apart, no board on active status, three different secrets a day, all well known; every puzzle rebuilds, a saved round comes back, and the answer wins; a Tenite day pins once, plays from its pinned board, carries "as of" unless it is about one event, and keeps its saved rounds. Analytics: a round finished before the first funnel count is not in the finish rate. The archive: a day's round survives the next day starting, a late day is saved beside it, and a late day counts as played but not towards the streak. `check:server` asks the endpoint for today twice and gets the same set.
 
 A generated data file that is missing makes its games report SKIPPED and the suite still passes, so a fresh clone is testable before the notebook runs.
 
@@ -794,7 +899,8 @@ From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** 
 | --- | --- | --- |
 | The day | `src/daily/day.ts` | A day is its date in `Europe/Berlin`, so the reset is midnight Central European time through summer time too. `DAILY_START` (5 Oct 2026) is puzzle #1; a day before it shows as "preview". `?day=YYYY-MM-DD` pretends it is another day, on a dev server only |
 | The puzzles | `src/daily/generate.ts`, `src/games/<game>/daily.ts` | A day's set is one small descriptor per game: a secret player and the clues in order, a Tenite board id, a List id, Tic Tac Toe's six rule ids. Each game's `daily.ts` picks one (`pickDaily`) and rebuilds a round from one (`restoreDaily`) |
-| Kept once made | `server/index.ts` `GET /api/daily/<day>`, table `daily_puzzles` | The first request for a day makes its set and the store keeps it; every later request reads the kept one. A deploy or a data update mid-day cannot change a puzzle people have played. Never a day after today on the live site |
+| Kept once made | `server/index.ts` `GET /api/daily/<day>`, table `daily_puzzles` | The first request for a day makes its set and the store keeps it; every later request reads the kept one. Never a day after today on the live site |
+| Pinned on the day | `freezeDay` in `generate.ts`, `freezeDaily` in `tenaball/daily.ts` | Until 14 Oct 2026 a Tenite day kept only its board's id and rebuilt the board from whatever data was live, so a data update changed past days, and today's too. Now the first request on or after a day's date copies the whole board, rows and numbers, into its descriptor (`frozen`), with `asOf` — the export's date, or the day itself for a follower board — shown as "As of 13 Oct 2026" under the tie rule; a board about one event gets none. Days made ahead stay unpinned until their date, so they play on their own day's data. Moving a pinned puzzle in the schedule editor unpins it (`unpinned`). Saved rounds are matched on `puzzleId`, the descriptor without `frozen` and `sig`, so pinning orphans nobody. The days served before 14 Oct (#1 to #10) are pinned on the data live when each is next asked for — the 13 Oct export, not the 5 Oct one most were played on |
 | Your progress | `src/daily/progress.ts`, `useDailyRound.ts` | The round in progress is saved on every move (`daily:<game>`, earlier days in `daily-past:<game>`), so a reload carries on; every finished day goes in `daily-log:<game>`. Browser only — no accounts yet |
 | The end | `src/components/DailyEnd.tsx` | Score, a Wordle-style emoji grid, **Share** (the phone's share sheet, or the clipboard), played / won / streak / best, and the countdown |
 
@@ -803,7 +909,7 @@ From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** 
 | Game | The daily is | Score and grid |
 | --- | --- | --- |
 | Fortnitedle | a well-known name; from guess 3, told the name has a digit, as in every round | `4/6`, Wordle's rows |
-| Career Path | a well-known player, clues oldest first | `3/10`, one square per clue: 🟥 guessed wrong, ⬛ skipped, 🟩 named, ⬜ not needed |
+| Career Path | a well-known player, clues building up (Random) | `3/10`, one square per clue: 🟥 guessed wrong, ⬛ skipped, 🟩 named, ⬜ not needed |
 | Who Are Ya | a well-known player, counts shown, weakest teammate first | the same as Career Path |
 | Tenite | a board of a known kind (players, seasons, FNCS, places, teammates, events, orgs and countries, Div Cups all time, the Globals), six of its ten rows well known; 5 lives | `7/10`, the ten slots and the hearts left |
 | List | a list of 10–60 with four famous names and 40% well known; wrong answers cost 3 seconds | `14/37`, ten blocks for the share found |
@@ -811,14 +917,14 @@ From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** 
 
 **Well known** (`src/daily/fame.ts`) is the Easy band plus the 250 best-earning players of the Medium band. The whole Medium band reaches into every region's own scene, which made "Top 10 duos of 2024 — Asia" a daily. The three secret players of a day are three different people, 60% from the Easy band, and none comes back while anyone unplayed is left (`SECRET_REST`).
 
-**Boards and lists come back only when they change** (`src/daily/reuse.ts`). Each Tenite and List daily keeps a fingerprint of who its answers are (`sig`). A board is never a daily again while its top 10 is the same people; once a big event changes it ("Top 10 by career earnings" after a World Cup), it is a new puzzle and may come back, but not within 30 days (`CHANGED_REST`). Neighbouring days are kept apart too: no kind of board or list twice within 2 days (`KIND_GAP`), and no family — one board split by region or year, like "average FNCS finish — NA East" and "— NA West" — within 7 (`FAMILY_GAP`). Boards that count only players Liquipedia lists as active are never a daily, since its retired status is rarely updated.
+**Boards and lists come back only when they change** (`src/daily/reuse.ts`). Each Tenite and List daily keeps a fingerprint of who its answers are (`sig`). Once a big event changes a board ("Top 10 by career earnings" after a World Cup) it is a new puzzle and may come back after 30 days (`CHANGED_REST`). The same top 10 may come back too, after 90 days (`SAME_REST`, 14 Oct 2026; the user: "even something doesn't change I would like to repeat it sometimes… like have world cup board again, because it's popular") — it used to wait for good. The schedule editor offers a board played over 90 days ago again ("over 90 days ago"). Neighbouring days are kept apart too: no kind of board or list twice within 2 days (`KIND_GAP`), and no family — one board split by region or year, like "average FNCS finish — NA East" and "— NA West" — within 7 (`FAMILY_GAP`). Boards that count only players Liquipedia lists as active are never a daily, since its retired status is rarely updated.
 
 **A streak** is days in a row with that game's daily played, win or lose — a hard day does not break a month. Every streak is per game, on the home page too: each daily's card shows its own 🔥 (4 Oct 2026, the user: "if player played fortnitedle today, it will show on fortnitedle 1 day streak but not for other games"). A day caught up from the archive counts as played and in Won, but not towards a streak or best run (`late` in the log). **Streaks live in the browser, per address**: `www.offspawn.app` and `offspawn.app` each keep their own. The one-address redirect of 13 Oct 2026 therefore started anyone who had played on `www.` from 0 (the user's own streak included; they chose to leave it: "it happens and won't affect overall game"). Data updates and deploys never touch it. What would reset everyone again: changing the site's address, the `chillfn:` storage prefix (`src/lib/storage.ts`), or a game's id.
 
 **Earlier puzzles** (the archive, 8 Oct 2026 — the user: "play previous days games, only if from this website nobody played before"). Every daily from #1 to yesterday can be played, **once per browser**:
 
 - **Where.** `/game/<slug>?puzzle=N` (`usePuzzleDay` in `src/daily/useDay.ts`; anything outside #1 to yesterday is today's). Reached from **📅 Earlier** beside a daily game's title and the missed days under a finished puzzle (`src/components/PastPuzzles.tsx`) — inside the games only: the home page lost its button on 13 Oct 2026, and its strip reads "Today's puzzles" with no number, since each game may count its days from a different start. The page says which day it is, that it will not count towards the streak, and links back to today's.
-- **Once.** A finished day opens to its board and result, never a new round. A day begun and left carries on where it was. A day finished before its board was kept (anything played before 8 Oct 2026) shows "You have played puzzle #N already" and its score (`played` in `useDailyRound`).
+- **Once.** A finished day opens to its board and result, never a new round. A day begun and left carries on where it was. A day finished before its board was kept (anything played before 8 Oct 2026) shows the whole board, every answer and number, above "You have played puzzle #N already" and its score (`played` and `answers` in `useDailyRound`; the user, 14 Oct 2026: "have like a full description… even if it [is] the past game"). Which answers were found is not known, so every row is plain. The note above an archive day says whether it was played on the day or late.
 - **Kept.** `daily:<game>` holds the latest day's round; when a later day starts, the earlier one moves to `daily-past:<game>`, where archive rounds are saved too. The newest 60 finished ones are kept for their boards; unfinished ones always stay. Browser only, like the rest.
 - **The server** already hands out any day up to today, so nothing changed there. The day's set is the one kept, so an archive puzzle is the one everybody had that day.
 - **List** runs its own daily loop (not `useDailyRound`) and has no archive yet; give it one before List is a daily again.

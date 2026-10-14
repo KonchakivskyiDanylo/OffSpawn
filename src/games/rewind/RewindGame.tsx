@@ -7,16 +7,18 @@ import { LevelSetup, type LevelOption } from '@/components/PoolSetup';
 import { Banner, Hearts, Stat } from '@/components/ui';
 import type { Bios } from '@/data/liquipedia/bios';
 import type { Facts } from '@/data/liquipedia/facts';
+import type { Majors } from '@/data/liquipedia/majors';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Roster } from '@/data/liquipedia/roster';
 import { useBios } from '@/data/liquipedia/useBios';
 import { useFacts } from '@/data/liquipedia/useFacts';
+import { useMajors } from '@/data/liquipedia/useMajors';
 import { useOrgs } from '@/data/liquipedia/useOrgs';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { getGame } from '@/games/registry';
 import { LEVEL_LABEL, type Level } from '@/games/shared/levels';
-import { dayMonthYear, plural } from '@/lib/format';
+import { plural } from '@/lib/format';
 import { makeRng } from '@/lib/rng';
 import {
   allMoments,
@@ -29,6 +31,7 @@ import {
   record as roundRecord,
   rightAt,
   swap,
+  when,
   type GameState,
 } from './engine';
 import './rewind.css';
@@ -45,22 +48,43 @@ export default function RewindGame() {
   const { roster, error: rosterError } = useRoster();
   const { facts, error: factsError } = useFacts();
   const { bios } = useBios();
-  const { orgs } = useOrgs();
+  const { orgs, error: orgsError } = useOrgs();
+  const { majors, error: majorsError } = useMajors();
+  // Orgs and majors only add kinds of moment, so a missing file is played
+  // without them — but a deal waits for them rather than racing them.
+  const settled = Boolean(roster && facts && bios && (orgs || orgsError) && (majors || majorsError));
   return (
-    <LiquipediaGate error={rosterError ?? factsError} ready={Boolean(roster && facts && bios)}>
-      {roster && facts && bios ? <Game roster={roster} facts={facts} bios={bios} orgs={orgs} /> : null}
+    <LiquipediaGate error={rosterError ?? factsError} ready={settled}>
+      {roster && facts && bios && settled ? (
+        <Game roster={roster} facts={facts} bios={bios} orgs={orgs} majors={majors} />
+      ) : null}
     </LiquipediaGate>
   );
 }
 
-function Game({ roster, facts, bios, orgs }: { roster: Roster; facts: Facts; bios: Bios; orgs: Orgs | null }) {
+function Game({
+  roster,
+  facts,
+  bios,
+  orgs,
+  majors,
+}: {
+  roster: Roster;
+  facts: Facts;
+  bios: Bios;
+  orgs: Orgs | null;
+  majors: Majors | null;
+}) {
   const { pools } = usePools();
   const [level, setLevel] = useState<Level>('easy');
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const moments = useMemo(() => allMoments({ roster, facts, bios, orgs }), [roster, facts, bios, orgs]);
+  const moments = useMemo(
+    () => allMoments({ roster, facts, bios, orgs, majors }),
+    [roster, facts, bios, orgs, majors],
+  );
 
   useRoundRecorder('rewind', game !== null && game.status !== 'playing', () => ({
     title: `Rewind — ${game!.level}`,
@@ -134,7 +158,7 @@ function Game({ roster, facts, bios, orgs }: { roster: Roster; facts: Facts; bio
           />
           {bios.dated ? null : (
             <p className="tiny faint center" style={{ margin: 0 }}>
-              Signings arrive with the next data build (bios.json).
+              Signings, departures and org titles arrive with the next data build (bios.json).
             </p>
           )}
           {error ? (
@@ -299,7 +323,7 @@ function Timeline({
               setDrag(null);
             }}
             tabIndex={isLocked ? -1 : 0}
-            aria-label={`${index + 1}: ${moment.text}${isLocked ? `, correct, ${dayMonthYear(moment.date)}` : ''}`}
+            aria-label={`${index + 1}: ${moment.text}${isLocked ? `, correct, ${when(moment)}` : ''}`}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
@@ -311,13 +335,14 @@ function Timeline({
             <span className="rw-card__icon" aria-hidden="true">
               {moment.icon}
             </span>
-            <span className="rw-card__body">
-              <span className="rw-card__text">{moment.text}</span>
-              {isLocked ? <span className="rw-card__date">{dayMonthYear(moment.date)}</span> : null}
-            </span>
+            <span className="rw-card__text">{moment.text}</span>
+            {/* A locked card has no arrows, so its date takes their place and the card stays one line. */}
             {isLocked ? (
-              <span className="rw-card__lock" aria-hidden="true">
-                🔒
+              <span className="rw-card__date">
+                {when(moment)}
+                <span className="rw-card__lock" aria-hidden="true">
+                  🔒
+                </span>
               </span>
             ) : (
               <span className="rw-card__moves">
@@ -356,10 +381,8 @@ function Answer({ game }: { game: GameState }) {
             <span className="rw-card__icon" aria-hidden="true">
               {moment.icon}
             </span>
-            <span className="rw-card__body">
-              <span className="rw-card__text">{moment.text}</span>
-              <span className="rw-card__date">{dayMonthYear(moment.date)}</span>
-            </span>
+            <span className="rw-card__text">{moment.text}</span>
+            <span className="rw-card__date">{when(moment)}</span>
           </div>
         );
       })}

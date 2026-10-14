@@ -145,6 +145,7 @@ export interface GamePayloads {
     placed: { square: number; player: Ref }[];
     wrong: { square: number; player: Ref }[];
     dealt: number;
+    /** The deck's size; 0 in Timed and Endless, which have none (the mode is in `setup`). */
     deck: number;
     lines: number;
   };

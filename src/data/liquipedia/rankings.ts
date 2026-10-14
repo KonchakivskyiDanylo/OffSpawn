@@ -92,6 +92,12 @@ export interface Board {
    * Otherwise a board level at the cut is not built at all.
    */
   shareCut?: boolean;
+  /**
+   * When the numbers were current, "YYYY-MM-DD": set only on a daily board
+   * pinned on its day (`freezeDaily` in `games/tenaball/daily.ts`), which then
+   * shows "As of …" under its title.
+   */
+  asOf?: string;
 }
 
 interface RawPayload {

@@ -1,0 +1,112 @@
+# The data update from UPDATE_DATA.md, run by GitHub instead of a laptop:
+# fetch what changed on Liquipedia, rebuild the site's data, check it, commit
+# it. Heroku deploys the commit like any other push.
+#
+# Started by "Update now" on /analytics/data (server/data-status.ts), by hand
+# from the Actions tab, or weekly on Monday morning. It does nothing until the
+# repository has the LIQUIPEDIA_API_KEY and LIQUIPEDIA_USER_AGENT secrets.
+#
+# The 500 MB raw dump is kept between runs in the Actions cache. The first run
+# has none, so it reads every table whole — about eight hours at the key's 60
+# requests an hour, more than one run may take. That is fine: the dump is
+# saved even when a run stops, and the next run carries on from it. GitHub
+# drops a cache nobody has read for seven days; the weekly run keeps it.
+name: Update data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 5 * * 1'
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      LIQUIPEDIA_API_KEY: ${{ secrets.LIQUIPEDIA_API_KEY }}
+      LIQUIPEDIA_USER_AGENT: ${{ secrets.LIQUIPEDIA_USER_AGENT }}
+      # Optional: the site's webhook pings, so older edits are re-read too.
+      OFFSPAWN_URL: ${{ secrets.OFFSPAWN_URL }}
+      OFFSPAWN_ADMIN_PASSWORD: ${{ secrets.OFFSPAWN_ADMIN_PASSWORD }}
+    steps:
+      - name: Set up?
+        id: ready
+        run: |
+          if [ -z "$LIQUIPEDIA_API_KEY" ] || [ -z "$LIQUIPEDIA_USER_AGENT" ]; then
+            echo "::notice::Add LIQUIPEDIA_API_KEY and LIQUIPEDIA_USER_AGENT to the repository's Actions secrets to turn the data update on."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A personal token, when there is one, so the data commit runs the Checks
+      # workflow too (a push made with the built-in token starts no workflows).
+      - uses: actions/checkout@v4
+        if: steps.ready.outputs.ok == 'true'
+        with:
+          token: ${{ secrets.DATA_PUSH_TOKEN || github.token }}
+
+      - uses: actions/setup-python@v5
+        if: steps.ready.outputs.ok == 'true'
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        if: steps.ready.outputs.ok == 'true'
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        if: steps.ready.outputs.ok == 'true'
+        run: |
+          pip install -r requirements.txt
+          npm ci
+
+      - name: Restore the raw dump
+        if: steps.ready.outputs.ok == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: liquipedia_data/raw_data
+          key: raw-dump-${{ github.run_id }}
+          restore-keys: raw-dump-
+
+      - name: Fetch what changed on Liquipedia
+        if: steps.ready.outputs.ok == 'true'
+        timeout-minutes: 320
+        run: python scripts/liquipedia_api.py
+
+      - name: Keep the raw dump
+        if: always() && steps.ready.outputs.ok == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: liquipedia_data/raw_data
+          key: raw-dump-${{ github.run_id }}
+
+      # Runs `npm run check:games` on the new files before replacing anything,
+      # and dates the export in roster.ts.
+      - name: Build the site's data
+        if: steps.ready.outputs.ok == 'true'
+        run: python scripts/build_data.py
+
+      - name: Commit
+        if: steps.ready.outputs.ok == 'true'
+        run: |
+          git add liquipedia_data/clean_data/fortnite src/data/liquipedia/roster.ts
+          if git diff --cached --quiet -- liquipedia_data; then
+            echo "Nothing changed on Liquipedia that the site reads."
+            exit 0
+          fi
+          npm run typecheck
+          git config user.name "OffSpawn data update"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Data update ($(date -u +%F), automatic)"
+          git push

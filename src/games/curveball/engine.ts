@@ -60,9 +60,41 @@ export function createGame(secret: RosterPlayer): GameState {
 }
 
 /**
+ * The y axis, the same for every curve, since an axis fitted to the curve
+ * would give away how high it goes before it got there.
+ *
+ * A cube-root scale up to $1M, and the World Cup money above it squeezed into
+ * a band at the top. It was a log scale from $100 to $5M, on which a year of
+ * $600K stood 4 pixels above one of $500K on a 236-pixel plot (the user,
+ * 14 Oct 2026: "500k and 600k are completely similar"); here they are 11
+ * apart. A square root would part them further but press the small earners
+ * onto the floor — Hard's typical curve peaks near $6K — while a cube root
+ * still lifts a $1K year a tenth of the way up. Only 11 years on record pass
+ * $1M (10 of them the 2019 World Cup), so the band gives them a tenth of the
+ * height rather than the two-fifths an unbroken scale to $5M would.
+ */
+export const AXIS = {
+  /** Where the cube root ends and the band begins. */
+  knee: 1_000_000,
+  /** The top: above the richest year on record, Bugha's $3.08M in 2019. */
+  max: 5_000_000,
+  /** The share of the height the band above the knee takes. */
+  band: 0.1,
+  ticks: [1_000, 10_000, 100_000, 250_000, 500_000, 1_000_000, 5_000_000],
+} as const;
+
+/** How far up the axis an amount sits, 0 (the floor, no prize money) to 1. */
+export function heightOf(value: number): number {
+  if (value <= 0) return 0;
+  const below = 1 - AXIS.band;
+  if (value <= AXIS.knee) return below * Math.cbrt(value / AXIS.knee);
+  return Math.min(1, below + (AXIS.band * Math.log(value / AXIS.knee)) / Math.log(AXIS.max / AXIS.knee));
+}
+
+/**
  * Prize money from the first year to the newest one showing — the career so
- * far, which the curve's log scale makes hard to add up by eye (the user,
- * 3 Oct 2026: "from the beginning until the year is currently shown").
+ * far, which a curve is hard to add up by eye (the user, 3 Oct 2026: "from
+ * the beginning until the year is currently shown").
  */
 export function totalSoFar(points: readonly Point[], shown: number): number {
   return points.slice(0, shown).reduce((sum, point) => sum + point.earnings, 0);

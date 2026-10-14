@@ -19,6 +19,14 @@ export function answerSig(keys: readonly string[]): string {
 /** Even a changed board waits this long, so a top 10 that moves every week is not every week's puzzle. */
 export const CHANGED_REST = 30;
 
+/**
+ * An unchanged board may come back after this long, as the same puzzle (the
+ * user, 14 Oct 2026: "even something doesn't change I would like to repeat it
+ * sometimes, maybe just have like 90 days… like have world cup board again,
+ * because it's popular"). It used to wait for good.
+ */
+export const SAME_REST = 90;
+
 export interface Use {
   daysAgo: number;
   id: string;
@@ -27,9 +35,10 @@ export interface Use {
 }
 
 /**
- * The ids not to offer, given how strict to be: everything used and unchanged,
- * and anything changed but used within `CHANGED_REST` days — both only within
- * `rest` days, so a caller can relax it when nothing else is left.
+ * The ids not to offer, given how strict to be: anything used unchanged within
+ * `SAME_REST` days, and anything changed but used within `CHANGED_REST` days —
+ * both only within `rest` days, so a caller can relax it when nothing else is
+ * left.
  */
 export function resting(uses: readonly Use[], current: (id: string) => string | null, rest: number): Set<string> {
   return new Set(
@@ -38,7 +47,7 @@ export function resting(uses: readonly Use[], current: (id: string) => string | 
       .filter((use) => {
         const now = current(use.id);
         const unchanged = !use.sig || now === null || now === use.sig;
-        return unchanged || use.daysAgo <= CHANGED_REST;
+        return use.daysAgo <= (unchanged ? SAME_REST : CHANGED_REST);
       })
       .map((use) => use.id),
   );

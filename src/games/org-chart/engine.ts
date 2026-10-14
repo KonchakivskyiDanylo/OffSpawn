@@ -14,7 +14,7 @@ import type { Level } from '@/games/shared/levels';
  * Built to the user's roadmap (2 Oct 2026). V1 is the levels and the three
  * clue styles; for V2 ("more clue types, revealed progressively — think about
  * something") the org's own facts are dealt in between the players: its region
- * after the third, the year it was founded after the fifth, its prize money
+ * after the third, the year it was founded after the sixth, its prize money
  * last. The facts only ever narrow a field the players have already pointed at.
  */
 
@@ -31,13 +31,25 @@ export const LEVELS: Record<Level, { top: number }> = {
 /** Roster players an org needs to be a round. */
 export const MIN_MEMBERS = 5;
 
-/** Player clues in a round, at most. */
-export const PLAYER_CLUES = 7;
+/**
+ * Player clues in a round, at most; fewer only when the org has fewer on the
+ * roster. It was seven (the user, 14 Oct 2026: "maybe more players, like
+ * increase it to eight if there is enough").
+ */
+export const PLAYER_CLUES = 8;
 
 /** The best-known players, by career earnings, held out of the opening. */
 export const HELD_BACK = 2;
 /** Clues at the top of a round they cannot be in. */
 export const OPENING = 3;
+
+/**
+ * The org's region comes after this many players, the year it was founded
+ * after this many (or after the last, on a smaller org), its prize money last:
+ * three, three and two players between them on a full hand of eight.
+ */
+export const REGION_AFTER = 3;
+export const FOUNDED_AFTER = 6;
 
 export type Clue =
   | {
@@ -133,12 +145,12 @@ export function createGame(
     org.founded ? { kind: 'fact', id: 'founded', label: 'Founded', value: org.founded.slice(0, 4) } : null,
     org.earnings > 0 ? { kind: 'fact', id: 'earnings', label: 'Prize money', value: moneyShort(org.earnings) } : null,
   ];
-  // Region after the third player, founded after the fifth, prize money last.
+  // Region after the third player, founded after the sixth (or the last), prize money last.
   const clues: Clue[] = [];
   players.forEach((clue, index) => {
     clues.push(clue);
-    if (index === 2 && facts[0]) clues.push(facts[0]);
-    if (index === 4 && facts[1]) clues.push(facts[1]);
+    if (index === REGION_AFTER - 1 && facts[0]) clues.push(facts[0]);
+    if (index === Math.min(FOUNDED_AFTER, players.length) - 1 && facts[1]) clues.push(facts[1]);
   });
   if (facts[2]) clues.push(facts[2]);
 

@@ -13,6 +13,11 @@ export const MOVED_SLUGS: Readonly<Record<string, string>> = {
   impostor: 'griefer',
   // Tenaball, renamed Tenite on 13 Oct 2026.
   tenaball: 'tenite',
+  // Renamed 14 Oct 2026: Who Are Ya? to Ready Up, Tic Tac Toe to Box Fight,
+  // Connections to Squads.
+  'who-are-ya': 'ready-up',
+  'tic-tac-toe': 'box-fight',
+  connections: 'squads',
 };
 
 /** `/game/tenaball?puzzle=3` -> `/game/tenite?puzzle=3`, or null when the address has not moved. */

@@ -28,7 +28,7 @@ import { pickFresh, useProgress, type PuzzleStatus } from '@/games/shared/progre
 import type { Searchable } from '@/lib/text';
 import { useBestScore } from '@/lib/storage';
 import { getGame } from '@/games/registry';
-import { ordinal, plural } from '@/lib/format';
+import { dayMonthYear, ordinal, plural } from '@/lib/format';
 import {
   applyGuess,
   createGame,
@@ -50,8 +50,8 @@ import './tenaball.css';
 const meta = getGame('tenaball')!;
 
 const DIFFICULTIES: { id: Difficulty; label: string; hint: string }[] = [
-  { id: 'easy', label: '🟢 Easy', hint: 'Unlimited guesses — just find all ten.' },
-  { id: 'hard', label: '🔴 Hard', hint: `${HARD_LIVES} lives. Every wrong answer costs one.` },
+  { id: 'easy', label: '🟢 Easy', hint: 'Unlimited guesses.' },
+  { id: 'hard', label: '🔴 Hard', hint: `${HARD_LIVES} lives; every wrong answer costs one.` },
 ];
 
 export default function TenaballGame() {
@@ -258,9 +258,20 @@ function Game({
   const { best, submit: submitScore } = useBestScore(scoreKey);
 
   if (!game && dailyOn) {
+    // A day played before its board was kept: the whole board, then the score
+    // (the user, 14 Oct 2026: "have like a full description… even if it [is] the past game").
+    const answers = daily.status === 'played' ? daily.answers : null;
     return (
       <GameShell {...shell}>
-        <DailyPending status={daily.status} error={daily.error} game="tenaball" played={daily.played} />
+        <div className="stack tb-play">
+          {answers ? (
+            <>
+              <BoardHead board={answers.board} />
+              <Slots game={answers} reveal />
+            </>
+          ) : null}
+          <DailyPending status={daily.status} error={daily.error} game="tenaball" played={daily.played} />
+        </div>
       </GameShell>
     );
   }
@@ -319,16 +330,6 @@ function Game({
   const { board } = game;
   const slots = slotsIn(game);
   const finished = game.status !== 'playing';
-  /*
-   * Whether the value column says anything the slot number has not.
-   *
-   * On a tournament board the value *is* the finishing position, so every row
-   * would print its own rank back at itself. Asked of the board rather than of
-   * each row, because a board written before the notebook ranked placements has
-   * two players per position — 1st is rows 1 and 2 — and there half the numbers
-   * do carry information.
-   */
-  const showValues = slots.some((slot) => slot.row.display !== String(slot.rank));
 
   const guess = (entity: Searchable) => {
     const result = applyGuess(game, entity.id, entity.name);
@@ -405,58 +406,8 @@ function Game({
           <Stat label="Best" value={best} />
         </div>
 
-        <section className="card tb-head">
-          <div className="tb-head__row">
-            <span className="tb-head__group">{board.group}</span>
-            <h2 className="tb-head__title">{board.title}</h2>
-          </div>
-          <p className="tiny faint">{board.tieRule}</p>
-          <WhatCounts terms={termsIn(`${board.group} ${board.title}`, board.id)} />
-        </section>
-
-        <ol className="tb-list list-reset">
-          {slots.map((slot) => {
-            const named = namedIn(game, slot.rank);
-            const complete = game.found.has(slot.rank);
-            const missed = finished && !complete;
-            const value = showValues ? slot.row.display : '';
-            return (
-              <li
-                key={slot.rank}
-                className={`tb-slot${complete ? ' tb-slot--filled' : ''}${
-                  missed ? ' tb-slot--missed' : ''
-                }${!complete && !finished && named.size > 0 ? ' tb-slot--partial' : ''}`}
-              >
-                <span className={`tb-slot__rank${slot.rank <= 3 ? ` tb-slot__rank--${['gold', 'silver', 'bronze'][slot.rank - 1]}` : ''}`}>
-                  {slot.rank}
-                </span>
-                <span className="tb-slot__name">
-                  {slot.members.map((member) =>
-                    named.has(member.key) ? (
-                      <span key={member.key} className="tb-member">
-                        {member.label}
-                      </span>
-                    ) : finished ? (
-                      <span key={member.key} className="tb-member tb-member--revealed">
-                        {member.label}
-                      </span>
-                    ) : (
-                      <span key={member.key} className="tb-member tb-member--blank">
-                        —
-                      </span>
-                    ),
-                  )}
-                  {missed && slot.also ? (
-                    <span className="tb-member tb-member--revealed">
-                      or {slot.also.map((member) => member.label).join(' & ')}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="tb-slot__value">{complete || finished ? value : ''}</span>
-              </li>
-            );
-          })}
-        </ol>
+        <BoardHead board={board} />
+        <Slots game={game} />
 
         {feedback ? (
           <p className="small center" style={{ color: feedback.tone }}>
@@ -516,6 +467,92 @@ function Game({
         )}
       </div>
     </GameShell>
+  );
+}
+
+/**
+ * The board's name, its tie rule, and on a daily pinned on its day the date
+ * its numbers are from (the user, 14 Oct 2026: "write somewhere like earnings
+ * as of …") — a past day keeps the board it was played on.
+ */
+function BoardHead({ board }: { board: Board }) {
+  return (
+    <section className="card tb-head">
+      <div className="tb-head__row">
+        <span className="tb-head__group">{board.group}</span>
+        <h2 className="tb-head__title">{board.title}</h2>
+      </div>
+      <p className="tiny faint">
+        {board.tieRule}
+        {board.asOf ? <span className="tb-head__asof"> As of {dayMonthYear(board.asOf)}.</span> : null}
+      </p>
+      <WhatCounts terms={termsIn(`${board.group} ${board.title}`, board.id)} />
+    </section>
+  );
+}
+
+/**
+ * The ten slots. In play, what is named so far; once over, the rest revealed
+ * in red. `reveal` is the answer key alone, every row plain — for a day played
+ * before its board was kept, where which ones were found is not known.
+ */
+function Slots({ game, reveal = false }: { game: GameState; reveal?: boolean }) {
+  const slots = slotsIn(game);
+  const finished = reveal || game.status !== 'playing';
+  /*
+   * Whether the value column says anything the slot number has not.
+   *
+   * On a tournament board the value *is* the finishing position, so every row
+   * would print its own rank back at itself. Asked of the board rather than of
+   * each row, because a board written before the notebook ranked placements has
+   * two players per position — 1st is rows 1 and 2 — and there half the numbers
+   * do carry information.
+   */
+  const showValues = slots.some((slot) => slot.row.display !== String(slot.rank));
+  return (
+    <ol className="tb-list list-reset">
+      {slots.map((slot) => {
+        const named = namedIn(game, slot.rank);
+        const complete = game.found.has(slot.rank);
+        const missed = finished && !complete && !reveal;
+        const value = showValues ? slot.row.display : '';
+        return (
+          <li
+            key={slot.rank}
+            className={`tb-slot${complete ? ' tb-slot--filled' : ''}${
+              missed ? ' tb-slot--missed' : ''
+            }${!complete && !finished && named.size > 0 ? ' tb-slot--partial' : ''}`}
+          >
+            <span className={`tb-slot__rank${slot.rank <= 3 ? ` tb-slot__rank--${['gold', 'silver', 'bronze'][slot.rank - 1]}` : ''}`}>
+              {slot.rank}
+            </span>
+            <span className="tb-slot__name">
+              {slot.members.map((member) =>
+                named.has(member.key) || reveal ? (
+                  <span key={member.key} className="tb-member">
+                    {member.label}
+                  </span>
+                ) : finished ? (
+                  <span key={member.key} className="tb-member tb-member--revealed">
+                    {member.label}
+                  </span>
+                ) : (
+                  <span key={member.key} className="tb-member tb-member--blank">
+                    —
+                  </span>
+                ),
+              )}
+              {(missed || reveal) && slot.also ? (
+                <span className="tb-member tb-member--revealed">
+                  or {slot.also.map((member) => member.label).join(' & ')}
+                </span>
+              ) : null}
+            </span>
+            <span className="tb-slot__value">{complete || finished ? value : ''}</span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

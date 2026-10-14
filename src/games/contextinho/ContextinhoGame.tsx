@@ -7,9 +7,13 @@ import { PlayerSearch } from '@/components/PlayerSearch';
 import { LevelSetup, type LevelOption } from '@/components/PoolSetup';
 import { SecretCard } from '@/components/SecretCard';
 import { Banner, Stat } from '@/components/ui';
+import type { Facts } from '@/data/liquipedia/facts';
+import type { Majors } from '@/data/liquipedia/majors';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { Roster } from '@/data/liquipedia/roster';
 import type { Teammates } from '@/data/liquipedia/teammates';
+import { useFacts } from '@/data/liquipedia/useFacts';
+import { useMajors } from '@/data/liquipedia/useMajors';
 import { useOrgs } from '@/data/liquipedia/useOrgs';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
@@ -51,10 +55,18 @@ const SHOW_LAB = import.meta.env.DEV;
 export default function ContextinhoGame() {
   const { roster, error: rosterError } = useRoster();
   const { teammates, error: matesError } = useTeammates();
-  const { orgs } = useOrgs();
+  // Each of these feeds a few parts and may be missing — those parts then
+  // score 0 — but the round waits until each has loaded or failed: one that
+  // arrived mid-round would re-rank every guess already made.
+  const { orgs, error: orgsError } = useOrgs();
+  const { facts, error: factsError } = useFacts();
+  const { majors, error: majorsError } = useMajors();
+  const settled = Boolean((orgs || orgsError) && (facts || factsError) && (majors || majorsError));
   return (
-    <LiquipediaGate error={rosterError ?? matesError} ready={Boolean(roster && teammates)}>
-      {roster && teammates ? <Game roster={roster} teammates={teammates} orgs={orgs} /> : null}
+    <LiquipediaGate error={rosterError ?? matesError} ready={Boolean(roster && teammates && settled)}>
+      {roster && teammates && settled ? (
+        <Game roster={roster} teammates={teammates} orgs={orgs} facts={facts} majors={majors} />
+      ) : null}
     </LiquipediaGate>
   );
 }
@@ -67,7 +79,19 @@ function band(rank: number): 'hot' | 'warm' | 'cool' | 'cold' {
   return 'cold';
 }
 
-function Game({ roster, teammates, orgs }: { roster: Roster; teammates: Teammates; orgs: Orgs | null }) {
+function Game({
+  roster,
+  teammates,
+  orgs,
+  facts,
+  majors,
+}: {
+  roster: Roster;
+  teammates: Teammates;
+  orgs: Orgs | null;
+  facts: Facts | null;
+  majors: Majors | null;
+}) {
   const { pools } = usePools();
   const [level, setLevel] = useState<Level>('easy');
   const [game, setGame] = useState<GameState | null>(null);
@@ -78,8 +102,8 @@ function Game({ roster, teammates, orgs }: { roster: Roster; teammates: Teammate
   const [peek, setPeek] = useState(false);
 
   const ranking = useMemo(
-    () => (game ? rankAll(game.secret, roster.players, weights, { teammates, orgs }) : null),
-    [game?.secret, roster, weights, teammates, orgs],
+    () => (game ? rankAll(game.secret, roster.players, weights, { teammates, orgs, facts, majors }) : null),
+    [game?.secret, roster, weights, teammates, orgs, facts, majors],
   );
 
   useRoundRecorder('contextinho', game !== null && game.status !== 'playing', () => ({
@@ -351,7 +375,7 @@ function Lab({
             <input type="checkbox" checked={peek} onChange={(event) => onPeek(event.target.checked)} /> Peek at the ten closest
           </label>
           <button type="button" className="link-btn small" onClick={() => onWeights(DEFAULT_WEIGHTS)}>
-            Reset to the four
+            Reset to the defaults
           </button>
         </div>
       </div>

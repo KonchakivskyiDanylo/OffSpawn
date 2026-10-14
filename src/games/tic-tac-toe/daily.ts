@@ -52,7 +52,7 @@ export function restoreDaily(
   byId: ReadonlyMap<string, RosterPlayer>,
   saved: Snapshot | null,
 ): GameState | null {
-  const board = boardFrom({ facts, orgs, socials }, dailyPools(roster, facts), puzzle.rows, puzzle.cols);
+  const board = boardFrom({ facts, orgs, socials }, dailyPools(roster, facts), puzzle.rows, puzzle.cols, DAILY_LEVEL);
   if (!board) return null;
   const fresh = createGame(board, DAILY_LEVEL);
   if (!saved) return fresh;

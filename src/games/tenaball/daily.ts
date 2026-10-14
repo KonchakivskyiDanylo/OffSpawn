@@ -44,10 +44,11 @@ const KINDS: { kind: string; groups: RegExp }[] = [
 const FAMOUS_ROWS = 6;
 
 /**
- * A board is never offered again while its top 10 is the same people
- * (`daily/reuse.ts`); these are the fallbacks if every board ever ran out.
+ * A board with the same top 10 waits `SAME_REST` days, a changed one
+ * `CHANGED_REST` (`daily/reuse.ts`); these narrow that window further only if
+ * every board ever ran out.
  */
-const REST_DAYS = [Infinity, 180, 60, 7];
+const REST_DAYS = [Infinity, 60, 7];
 
 /** Who is on a board, for telling a changed top 10 from the same one. */
 export function boardSig(board: Board): string {
@@ -128,6 +129,33 @@ export function pickDaily(
   return null;
 }
 
+/**
+ * The day's board as it stands now, pinned into its descriptor: the same ten
+ * and the same numbers for good, whatever later data updates do to the board
+ * of that name (the user, 14 Oct 2026: "the daily challenge has passed and
+ * that's it"). The same category can still come back as a new puzzle once its
+ * top 10 changes (`reuse.ts`); this only keeps a played day as it was.
+ *
+ * `asOf` is the data's date — the export's, or the day itself for the
+ * follower counts, which the server fetches daily. A board about one event
+ * gets none: its results do not move. Null when there is nothing to pin: the
+ * board is pinned already, or the data no longer has it.
+ */
+export function freezeDaily(
+  puzzle: Puzzle,
+  rankings: Rankings,
+  roster: Roster,
+  socials: Socials | null,
+  majors: Majors | null,
+  today: string,
+): Puzzle | null {
+  if (puzzle.frozen) return null;
+  const board = dailyBoards(rankings, roster, socials, majors).find((candidate) => candidate.id === puzzle.board);
+  if (!board) return null;
+  const asOf = board.id.startsWith('tournament:') ? undefined : board.group === SOCIAL_GROUP ? today : rankings.generated;
+  return { ...puzzle, sig: boardSig(board), frozen: asOf ? { ...board, asOf } : board };
+}
+
 /** Which names are on the board so far, by rank — `Map`s and `Set`s do not survive JSON. */
 export interface Snapshot {
   named: [number, string[]][];
@@ -147,7 +175,10 @@ export function restoreDaily(
   majors: Majors | null,
   saved: Snapshot | null,
 ): GameState | null {
-  const board = dailyBoards(rankings, roster, socials, majors).find((candidate) => candidate.id === puzzle.board);
+  // A day pinned on its date plays its own board; one not pinned yet (a dev
+  // server, or a day made before 14 Oct 2026 and not served since) today's.
+  const board =
+    puzzle.frozen ?? dailyBoards(rankings, roster, socials, majors).find((candidate) => candidate.id === puzzle.board);
   if (!board) return null;
   const fresh = createGame(board, DAILY_LEVEL, DAILY_LIVES);
   if (!saved) return fresh;

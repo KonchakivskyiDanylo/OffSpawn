@@ -63,13 +63,13 @@ export const TERMS: Record<TermId, Term> = {
     id: 'tournament',
     name: 'Tournament',
     text:
-      'Any Fortnite tournament Liquipedia has a page for: Epic’s own events, third-party cups, qualifiers and the weekly cash cups, online or offline. A count of tournaments played or won counts every one of them, from a $50 cup to the World Cup.',
+      'Any Fortnite tournament with a Liquipedia page — Epic’s events, third-party cups, qualifiers, cash cups, online or offline. A count of tournaments counts all of them.',
   },
   major: {
     id: 'major',
     name: 'Major',
     text:
-      'An Epic-run main event that Liquipedia rates tier 1, from the 2019 World Cup on: every regional FNCS grand final, every Global Championship, the World Cup finals and Epic’s other LANs. Qualifiers, showmatches, cash cups, console, mobile and Twitch events are not majors, and neither are challenge events like MrBeast’s Extreme Survival Challenge, a third-party event however big, or anything before the World Cup.',
+      'A tier-1 main event run by Epic, from the 2019 World Cup on: every regional FNCS grand final, every Global Championship, the World Cup finals and Epic’s other LANs. Not qualifiers, showmatches, cash cups, console, mobile, Twitch or challenge events, and not third-party events.',
     events: (facts) => {
       const regional = facts.events.filter(isRegional).length;
       return {
@@ -82,33 +82,33 @@ export const TERMS: Record<TermId, Term> = {
     id: 'lan',
     name: 'Major LAN',
     text:
-      'A major played offline, in front of a crowd: Epic’s own LAN finals, listed below. DreamHack, Gamers8 and other offline events Epic did not run are not major LANs, and neither are the practice cash cups held at one.',
+      'A major played offline: Epic’s own LAN finals, listed below. DreamHack, Gamers8 and other events Epic did not run are not major LANs, nor are cash cups held at one.',
     events: (facts) => ({ names: named(facts.events.filter((event) => event.lan)) }),
   },
   'lan-wide': {
     id: 'lan-wide',
     name: 'LAN',
     text:
-      'Any offline main event in Liquipedia’s top two tiers: Epic’s major LANs, and DreamHack, Gamers8 and the Esports World Cup alongside them. Only the “LAN wins” board counts this way; everywhere else it is a major LAN.',
+      'Any offline main event in Liquipedia’s top two tiers: Epic’s major LANs plus DreamHack, Gamers8 and the Esports World Cup. Only the “LAN wins” board counts this way.',
   },
   global: {
     id: 'global',
     name: 'Global Championship',
     text:
-      'The FNCS Global Championship, held once a year since 2023: the offline final every region qualifies into. The 2019 World Cup is not one. A Globals is a title of its own — winning one does not add to a player’s FNCS wins.',
+      'The FNCS Global Championship, held yearly since 2023: the offline final every region qualifies into. The 2019 World Cup is not one, and a Globals win is not an FNCS win.',
     events: (facts) => ({ names: named(facts.events.filter((event) => event.kind === 'global')) }),
   },
   'fncs-title': {
     id: 'fncs-title',
     name: 'FNCS win',
     text:
-      'A regional FNCS grand final won — Europe, North America, Brazil and the rest, every season since 2019. PC finals only: the 2020 console FNCS is not counted. The Global Championships, the 2022 Invitational and the 2026 Summit carry the FNCS name but are not FNCS wins, and “won an FNCS in 2026” means a regional final that year.',
+      'A regional FNCS grand final won, in any region, since 2019. PC only: the 2020 console FNCS does not count. The Globals, the 2022 Invitational and the 2026 Summit are not FNCS wins.',
   },
   'fncs-final': {
     id: 'fncs-final',
     name: 'FNCS grand finals played',
     text:
-      'Every regional FNCS grand final a player reached, plus the FNCS events played offline: the Global Championships, the 2022 Invitational and the 2026 Summit. Qualifying heats and cash cups do not count.',
+      'Every regional FNCS grand final reached, plus the offline FNCS events: the Globals, the 2022 Invitational and the 2026 Summit. Not qualifying heats or cash cups.',
     events: (facts) => {
       const regional = facts.events.filter(isRegional).length;
       return {
@@ -123,61 +123,61 @@ export const TERMS: Record<TermId, Term> = {
     id: 'nationality',
     name: 'Nationality',
     text:
-      'The first nationality on the player’s Liquipedia page — the flag shown beside their name. A player who lists two counts for the first one only: Peterbot, listed United States then Hungary, is American here and not Hungarian. England, Scotland and Wales are nations of their own when a player lists one of them first, so Cr1nge, listed Scotland then United Kingdom, is Scottish here and not British.',
+      'The first nationality on the player’s Liquipedia page. Peterbot (United States, then Hungary) counts as American only. England, Scotland and Wales count as nations when listed first: Cr1nge is Scottish here, not British.',
   },
   region: {
     id: 'region',
     name: 'Region',
     text:
-      'Where a player competes, as Liquipedia records it — not where they are from. There are six: Europe, North America (East and West together), South America (the FNCS’s Brazil region), Asia, Oceania and the Middle East.',
+      'Where a player competes, not where they are from. Six: Europe, North America (East and West together), South America (the FNCS’s Brazil), Asia, Oceania and the Middle East.',
   },
   'fncs-region': {
     id: 'fncs-region',
     name: 'FNCS region',
     text:
-      'The region of the grand final a player played, not the one on their profile. North America is split the way the FNCS split it: NA East and NA West until Major 1 of 2023, one North America final from Major 2 of 2023 through 2024 — NA Central here — then NA Central and NA West again from 2025. Brazil is the FNCS’s South America.',
+      'The region of the final a player played, not their profile’s. North America follows the FNCS: NA East and NA West until Major 1 of 2023, one final (NA Central here) through 2024, then NA Central and NA West. Brazil is South America.',
   },
   org: {
     id: 'org',
     name: 'Organisation',
     text:
-      '“Has played for” means at any point on record, not only today. Counting the organisations in an event’s field uses each player’s current team, so a player without one counts for nobody.',
+      '“Has played for” means at any time, not only now. Counting the orgs in an event’s field uses each player’s current team.',
   },
   earnings: {
     id: 'earnings',
     name: 'Earnings',
     text:
-      'Individual prize money recorded on Liquipedia, in US dollars — a team’s prize split between its players. “In 2026” is that calendar year. Salaries, creator deals and anything Liquipedia does not list are not included.',
+      'Individual prize money on Liquipedia, in US dollars — a team’s prize split between its players. “In 2026” is that calendar year. No salaries or creator deals.',
   },
   age: {
     id: 'age',
     name: 'Age',
     text:
-      'Age today, worked out from the player’s published birthday. A player with no birthday on record is left out of every age question rather than guessed.',
+      'Age today, from the published birthday. Players with no birthday on record are left out of age questions.',
   },
   teammates: {
     id: 'teammates',
     name: 'Teammates',
     text:
-      'Two players are teammates at a tournament when they share one result — a duo, trio or squad. Counts are tournaments entered together, across every tournament on record.',
+      'Teammates share a result at a tournament — a duo, trio or squad. Counts are tournaments entered together.',
   },
   field: {
     id: 'field',
     name: 'Qualified',
     text:
-      'In the event’s field as Liquipedia lists it. An entrant with no Liquipedia player page cannot be an answer.',
+      'In the event’s field as Liquipedia lists it. An entrant without a Liquipedia page cannot be an answer.',
   },
   'div-cup': {
     id: 'div-cup',
     name: 'Div Cup',
     text:
-      'An FNCS Divisional Cup final, Chapter 6 on: one a week in each of seven regions — Europe, NA Central, NA West, Brazil, Asia, the Middle East and Oceania — and C6S4’s three Practice Cups count too. Each region’s final is its own event, so a player in two regions’ finals in one week has two. The region is the final’s, not the one on the player’s profile. Chapter 6 was trios until C6S4’s duos; Chapter 7 is duos.',
+      'An FNCS Divisional Cup final, from Chapter 6: one a week in each of seven regions (Europe, NA Central, NA West, Brazil, Asia, Middle East, Oceania), C6S4’s three Practice Cups included. Each region’s final is its own event, and the region is the final’s. Chapter 6 was trios (duos in C6S4); Chapter 7 is duos.',
   },
   fpe: {
     id: 'fpe',
     name: 'Performance Evaluation',
     text:
-      'Epic’s Fortnite Performance Evaluation sessions, held in Europe and NA Central since 2023: one lobby, the top four paid. Reload and Arenas evaluations are not included.',
+      'Epic’s Fortnite Performance Evaluation sessions, in Europe and NA Central since 2023: one lobby, top four paid. Reload and Arenas evaluations are not included.',
   },
 };
 

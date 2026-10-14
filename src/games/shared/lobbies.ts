@@ -24,7 +24,7 @@ export interface Lobby {
   variant: string | null;
   mode: string | null;
   prizePool: number | null;
-  /** How many places the results go down to. */
+  /** How many places the results go down to. Never shown in a round: a field's size can name the event. */
   size: number;
 }
 

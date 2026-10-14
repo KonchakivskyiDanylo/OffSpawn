@@ -20,10 +20,11 @@ const SIZE = { min: 10, max: 60 };
 const FAMOUS = { names: 4, share: 0.4 };
 
 /**
- * A list is never offered again while its answers are the same people
- * (`daily/reuse.ts`); these are the fallbacks if every list ever ran out.
+ * A list with the same answers waits `SAME_REST` days, a changed one
+ * `CHANGED_REST` (`daily/reuse.ts`); these narrow that window further only if
+ * every list ever ran out.
  */
-const REST_DAYS = [Infinity, 120, 30, 7];
+const REST_DAYS = [Infinity, 30, 7];
 
 /** Who is on a list, for telling a changed list from the same one. */
 export function listSig(list: Criterion): string {

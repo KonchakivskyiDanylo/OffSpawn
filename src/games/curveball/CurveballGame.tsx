@@ -15,8 +15,10 @@ import { giveUp, guess, skip } from '@/games/shared/clue-round';
 import { dealFresh, LEVEL_LABEL, levelPlayers, type Level } from '@/games/shared/levels';
 import { moneyShort, plural } from '@/lib/format';
 import {
+  AXIS,
   createGame,
   eligible,
+  heightOf,
   MIN_GUESSES,
   pointLabel,
   record as roundRecord,
@@ -174,23 +176,14 @@ const H = 300;
 const PAD = { left: 58, right: 18, top: 26, bottom: 38 };
 const FLOOR = H - PAD.bottom;
 
-/**
- * The y axis, the same for every player: a log scale, because one World Cup
- * year is a hundred times a good FNCS year, and a fixed one — $100 to $5M —
- * because an axis fitted to the curve would give away how high the curve goes
- * before it got there.
- */
-const SCALE = { min: 2, max: Math.log10(5_000_000), ticks: [100, 1_000, 10_000, 100_000, 1_000_000] };
-
 function moneyTick(value: number): string {
   return value >= 1_000_000 ? `$${value / 1_000_000}M` : value >= 1_000 ? `$${value / 1_000}K` : `$${value}`;
 }
 
-/** Height of an amount on the plot; null for a year with nothing to plot. */
+/** Height of an amount on the plot (the engine's fixed axis); null for a year with nothing to plot. */
 function yOf(value: number): number | null {
   if (!value) return null;
-  const t = (Math.log10(Math.max(value, 10 ** SCALE.min)) - SCALE.min) / (SCALE.max - SCALE.min);
-  return PAD.top + Math.min(1, Math.max(0, 1 - t)) * (FLOOR - PAD.top);
+  return FLOOR - heightOf(value) * (FLOOR - PAD.top);
 }
 
 function Chart({
@@ -237,10 +230,11 @@ function Chart({
         </linearGradient>
       </defs>
 
-      {SCALE.ticks.map((value) => {
+      {AXIS.ticks.map((value) => {
         const y = yOf(value)!;
         return (
-          <g key={value} className="cb-grid">
+          // Dashed at the knee: above it the scale is squeezed, so a gap there means more.
+          <g key={value} className={`cb-grid${value === AXIS.knee ? ' cb-grid--knee' : ''}`}>
             <line x1={PAD.left} x2={W - PAD.right} y1={y} y2={y} />
             <text x={PAD.left - 8} y={y + 4} textAnchor="end">
               {moneyTick(value)}
@@ -248,6 +242,11 @@ function Chart({
           </g>
         );
       })}
+      <g className="cb-grid">
+        <text x={PAD.left - 8} y={FLOOR + 4} textAnchor="end">
+          $0
+        </text>
+      </g>
       <line className="cb-floor" x1={PAD.left} x2={W - PAD.right} y1={FLOOR} y2={FLOOR} />
 
       {points.map((point, index) => {

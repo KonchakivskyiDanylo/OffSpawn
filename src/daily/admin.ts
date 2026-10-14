@@ -10,8 +10,9 @@ import { dailyPools } from '@/games/tic-tac-toe/daily';
 import { puzzleFor as whoPuzzle, dailyPool as whoPool } from '@/games/who-are-ya/daily';
 import { eligible as wordleEligible } from '@/games/wordle/engine';
 import { daysBetween } from './day';
+import { SAME_REST } from './reuse';
 import { dailyContext, pickPuzzle, type DailyData } from './generate';
-import { LIVE_DAILY, type DailyGame, type DailyPuzzles, type DailySet } from './types';
+import { LIVE_DAILY, puzzleId, type DailyGame, type DailyPuzzles, type DailySet } from './types';
 
 /**
  * The daily schedule editor's half on the server: what each day's puzzle is
@@ -70,7 +71,7 @@ function lookup(data: DailyData) {
       boards: new Map(dailyBoards(rankings, roster, socials, majors).map((board) => [board.id, board])),
       lists: new Map(buildCriteria(roster, facts, null, orgs, teammates, socials).map((list) => [list.id, list])),
       rules: new Map(
-        boardRules({ facts, orgs, socials }, dailyPools(roster, facts)).map((rule) => [rule.id, rule.short]),
+        boardRules({ facts, orgs, socials }, dailyPools(roster, facts), 'medium').map((rule) => [rule.id, rule.short]),
       ),
     };
     lookups.set(data, found);
@@ -100,8 +101,12 @@ export function describe(game: DailyGame, puzzle: DailyPuzzles[DailyGame] | unde
   return { label: puzzle.rows.map(name).join(' · '), detail: `× ${puzzle.cols.map(name).join(' · ')}` };
 }
 
-/** The days `id` is on in `sets`, and whether its answers have changed since. */
-function usesOf(game: 'tenaball' | 'list', id: string, sets: readonly DailySet[], now: string | null) {
+/**
+ * The days `id` is on in `sets`, whether its answers have changed since, and
+ * whether that day is more than `SAME_REST` days from `from` — far enough to
+ * come back as it is.
+ */
+function usesOf(game: 'tenaball' | 'list', id: string, sets: readonly DailySet[], now: string | null, from: string) {
   return sets
     .filter((set) => {
       const puzzle = set.puzzles[game] as { board?: string; list?: string } | undefined;
@@ -109,7 +114,11 @@ function usesOf(game: 'tenaball' | 'list', id: string, sets: readonly DailySet[]
     })
     .map((set) => {
       const sig = (set.puzzles[game] as { sig?: string }).sig;
-      return { day: set.day, changed: Boolean(sig && now && sig !== now) };
+      return {
+        day: set.day,
+        changed: Boolean(sig && now && sig !== now),
+        rested: Math.abs(daysBetween(set.day, from)) > SAME_REST,
+      };
     });
 }
 
@@ -126,7 +135,7 @@ export function sameElsewhere(
   firstEditable: string,
 ): { past: string[]; coming: string[] } {
   if (game !== 'tenaball' && game !== 'list') return { past: [], coming: [] };
-  const same = usesOf(game, id, others, sigOf(game, id, data)).filter((use) => !use.changed);
+  const same = usesOf(game, id, others, sigOf(game, id, data), firstEditable).filter((use) => !use.changed && !use.rested);
   return {
     past: same.filter((use) => use.day < firstEditable).map((use) => use.day),
     coming: same.filter((use) => use.day >= firstEditable).map((use) => use.day),
@@ -168,14 +177,14 @@ export function optionsFor(
         id: board.id,
         label: board.title,
         group: board.group,
-        used: usesOf('tenaball', board.id, sets, boardSig(board)).map((use) => ({ ...use, past: use.day < firstEditable })),
+        used: usesOf('tenaball', board.id, sets, boardSig(board), firstEditable).map((use) => ({ ...use, past: use.day < firstEditable })),
       }));
     case 'list':
       return [...lists.values()].map((list) => ({
         id: list.id,
         label: list.title,
         group: `${list.answers.length} answers`,
-        used: usesOf('list', list.id, sets, listSig(list)).map((use) => ({ ...use, past: use.day < firstEditable })),
+        used: usesOf('list', list.id, sets, listSig(list), firstEditable).map((use) => ({ ...use, past: use.day < firstEditable })),
       }));
     default:
       return [];
@@ -222,7 +231,8 @@ export function redraw(
   others: readonly DailySet[],
   data: DailyData,
 ): DailyPuzzles[DailyGame] | null {
-  const was = JSON.stringify(set.puzzles[game] ?? null);
+  // Today's may be pinned; the same board drawn again is still the same puzzle.
+  const was = puzzleId(set.puzzles[game]);
   for (let attempt = 0; attempt < 6; attempt++) {
     const taken = new Set(
       SECRET_GAMES.filter((other) => other !== game).flatMap((other) => {
@@ -236,7 +246,7 @@ export function redraw(
     }
     const salt = `:redraw:${Date.now().toString(36)}:${attempt}`;
     const puzzle = pickPuzzle(game, data, dailyContext(set.day, data, [set, ...others], taken, salt));
-    if (puzzle && JSON.stringify(puzzle) !== was) return puzzle;
+    if (puzzle && puzzleId(puzzle) !== was) return puzzle;
   }
   return null;
 }
@@ -258,7 +268,9 @@ export function warningFor(game: DailyGame, set: DailySet, all: readonly DailySe
   if (game === 'tenaball' || game === 'list') {
     // A board or a list is a repeat on any day while its answers are the same people.
     const now = sigOf(game, mine ?? '', data);
-    const same = usesOf(game, mine ?? '', all.filter((other) => other.day !== set.day), now).filter((use) => !use.changed);
+    const same = usesOf(game, mine ?? '', all.filter((other) => other.day !== set.day), now, set.day).filter(
+      (use) => !use.changed && !use.rested,
+    );
     if (same.length) out.push(`also on ${same.map((use) => use.day).join(', ')}, with the same answers`);
   } else {
     const near = all
