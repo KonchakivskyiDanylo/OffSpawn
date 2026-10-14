@@ -3,7 +3,7 @@ import type { RosterPlayer } from '@/data/liquipedia/roster';
 import type { Teammates } from '@/data/liquipedia/teammates';
 import type { FameTier } from '@/data/liquipedia/roster';
 import { makeRng, pick, shuffle, type Rng } from '@/lib/rng';
-import { ambiguousNames, namedPlayer } from '@/lib/text';
+import { namedPlayer, namesakesOf } from '@/lib/text';
 import {
   buildCriteria,
   isNested,
@@ -58,8 +58,11 @@ export type Mode = 'deck' | 'timed' | 'endless';
  * `bands` is who is dealt: the famous players on Easy, the regulars too on
  * Medium, anyone on Hard. `deck` is the Deck mode's size (the user, 14 Oct
  * 2026: "Decrease players, so have like 40-35-30"), and `seconds` the Timed
- * clock (their "60-90-120"): the easier the level, the longer the clock, so
- * Hard's unknown names come with the least time to place them. `lives` is how
+ * clock: the easier the level, the longer the clock. It was 2:00 / 1:30 / 1:00
+ * (their "60-90-120"), but a perfect player needs about 21, 34 and 39 players
+ * to fill the card, so Hard left 1.5 seconds a player. At 2:00 / 1:45 / 1:30
+ * the pace still tightens with the level — about 5.7, 3.1 and 2.3 seconds a
+ * player — without Hard being out of reach (the user: "75 seconds then? Or what?"). `lives` is how
  * many players put on a square they do not fit end the round, in every mode:
  * in a stream that never runs dry they are what stops tapping squares at
  * random from being free. `cover` is how many players in the deck fit every
@@ -72,8 +75,8 @@ export const LEVELS: Record<
   { answers: number; cover: number; lives: number; deck: number; seconds: number; bands: FameTier[] }
 > = {
   easy: { answers: 4, cover: 3, lives: 3, deck: 40, seconds: 120, bands: ['easy'] },
-  medium: { answers: 3, cover: 2, lives: 3, deck: 35, seconds: 90, bands: ['easy', 'medium'] },
-  hard: { answers: 2, cover: 2, lives: 2, deck: 30, seconds: 60, bands: ['easy', 'medium', 'hard'] },
+  medium: { answers: 3, cover: 2, lives: 3, deck: 35, seconds: 105, bands: ['easy', 'medium'] },
+  hard: { answers: 2, cover: 2, lives: 2, deck: 30, seconds: 90, bands: ['easy', 'medium', 'hard'] },
 };
 
 /**
@@ -153,7 +156,7 @@ export function bingoCriteria(source: BingoSource, minMatches: number): PlayerCr
    */
   if (teammates) {
     const byId = new Map(roster.map((player) => [player.id, player]));
-    const ambiguous = ambiguousNames(roster);
+    const namesakes = namesakesOf(roster);
     for (const anchor of roster.filter((player) => player.tier === 'easy')) {
       const mates = new Set(
         teammates
@@ -161,7 +164,7 @@ export function bingoCriteria(source: BingoSource, minMatches: number): PlayerCr
           .filter((clue) => clue.events >= 10)
           .map((clue) => clue.player.id),
       );
-      const name = namedPlayer(anchor, ambiguous);
+      const name = namedPlayer(anchor, namesakes);
       add(
         `with:${anchor.id}`,
         'played-with',

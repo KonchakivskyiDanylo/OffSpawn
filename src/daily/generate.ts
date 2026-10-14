@@ -136,7 +136,7 @@ export function pickPuzzle<G extends DailyGame>(game: G, data: DailyData, ctx: D
     wordle: () => wordle(roster, ctx),
     'career-path': () => careerPath(roster, majors, ctx),
     'who-are-ya': () => whoAreYa(roster, teammates, facts, byId, ctx),
-    tenaball: () => tenaball(roster, rankings, socials, majors, ctx),
+    tenaball: () => tenaball(roster, rankings, socials, majors, ctx, facts),
     list: () => list(roster, buildCriteria(roster, facts, null, orgs, teammates, socials), ctx),
     'tic-tac-toe': () => ticTacToe(roster, facts, orgs, socials, ctx),
   };
@@ -189,6 +189,6 @@ export function generateDaily(
 export function freezeDay(set: DailySet, data: DailyData, today: string): DailySet | null {
   const puzzle = set.puzzles.tenaball;
   if (!puzzle) return null;
-  const frozen = freezeBoard(puzzle, data.rankings, data.roster, data.socials ?? null, data.majors, today);
+  const frozen = freezeBoard(puzzle, data.rankings, data.roster, data.socials ?? null, data.majors, today, data.facts);
   return frozen ? { ...set, puzzles: { ...set.puzzles, tenaball: frozen } } : null;
 }

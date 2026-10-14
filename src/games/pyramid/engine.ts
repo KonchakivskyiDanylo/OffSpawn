@@ -28,14 +28,16 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
  * Easy, where checking is how you learn the order. `bands` is who can come up.
  * `start` is how far down the ranking the ten may begin — never the long tail
  * of one-off entries at the bottom, which nobody can order — and `gap` how far
- * apart two neighbours must be in a share category (money, an average finish),
- * as a share of the bigger, so no two are a coin flip: wider on Easy, tighter
- * on Hard.
+ * apart two neighbours must be in a share category (money, followers), as a
+ * share of the bigger, so no two are a coin flip: wider on Easy, tighter on
+ * Hard. `days` is the same for a birth date: two players of one age a few
+ * months apart are fine (the user, 14 Oct 2026: "if the same age but months
+ * it's fine"), a week apart is not.
  */
-export const LEVELS: Record<Difficulty, { lives: number; bands: FameTier[]; start: number; gap: number }> = {
-  easy: { lives: Number.POSITIVE_INFINITY, bands: ['easy'], start: 0.25, gap: 0.12 },
-  medium: { lives: 2, bands: ['easy', 'medium'], start: 0.35, gap: 0.06 },
-  hard: { lives: 1, bands: ['easy', 'medium', 'hard'], start: 0.5, gap: 0.03 },
+export const LEVELS: Record<Difficulty, { lives: number; bands: FameTier[]; start: number; gap: number; days: number }> = {
+  easy: { lives: Number.POSITIVE_INFINITY, bands: ['easy'], start: 0.25, gap: 0.12, days: 180 },
+  medium: { lives: 2, bands: ['easy', 'medium'], start: 0.35, gap: 0.06, days: 90 },
+  hard: { lives: 1, bands: ['easy', 'medium', 'hard'], start: 0.5, gap: 0.03, days: 30 },
 };
 
 /** One thing to sort: a player, or on a tournament a team. */
@@ -69,49 +71,42 @@ export interface PlayerCategory {
   title: string;
   /**
    * `share`: each value a share of itself away from the next — money,
-   * followers, an average finish. `count`: one player per value.
+   * followers. `count`: one player per value. `date`: days since 1970, each
+   * at least the level's `days` from the next.
    */
-  kind: 'share' | 'count';
-  /** Smallest at the top: an average finish, an age. */
+  kind: 'share' | 'count' | 'date';
+  /** Smallest at the top. */
   lowFirst?: boolean;
   /** Under the title; "Most at the top" when not set. */
   direction?: string;
   /** Out of the draw for now. The code stays, so dropping the flag brings it back. */
   hidden?: boolean;
-  /** 0 is "not in this category" — no published birthday, fewer than two Globals. */
+  /** 0 is "not in this category" — no published birthday, say. */
   value: (player: RosterPlayer) => number;
   display: (value: number) => string;
 }
 
 const count = (word: string) => (value: number) => `${value} ${word}${value === 1 ? '' : 's'}`;
 
-/** A regional FNCS grand final: online, one per region per round — what an FNCS win counts. */
-const isRegionalFinal = (event: { kind: string; lan: boolean }) => event.kind === 'fncs' && !event.lan;
+const DAY = 86_400_000;
 
-/**
- * Average finish at the Global Championships, for players with two or more —
- * one Globals is a single result, not an average. Duos and trios share their
- * finish, so a pair who played every Globals together share the average too.
- */
-function globalsAverages(roster: Roster, majors: Majors): Map<string, number> {
-  const out = new Map<string, number>();
-  for (const player of roster.players) {
-    const finishes = majors
-      .resultsFor(player.id)
-      .filter((result) => /Global Championship/.test(result.tournament.name))
-      .map((result) => result.placement);
-    if (finishes.length >= 2) out.set(player.id, finishes.reduce((sum, place) => sum + place, 0) / finishes.length);
-  }
-  return out;
+/** "19y 4m": an age today to the month, which a whole year cannot tell apart. */
+function ageToday(born: number): string {
+  const birth = new Date(born * DAY);
+  const now = new Date();
+  let months = (now.getUTCFullYear() - birth.getUTCFullYear()) * 12 + now.getUTCMonth() - birth.getUTCMonth();
+  if (now.getUTCDate() < birth.getUTCDate()) months--;
+  return `${Math.floor(months / 12)}y ${months % 12}m`;
 }
 
 /**
  * The categories, grouped by kind, hidden ones included. A kind with several
  * categories draws one inside it — earnings in a year has a year per category
- * so nine years do not crowd out everything else; FNCS podiums and top 10s
- * share one, so the FNCS is three kinds in eight rather than four in nine.
+ * so nine years do not crowd out everything else.
  *
  * Not here, and why:
+ * - FNCS podiums, FNCS top 10s, average Globals finish: added and taken out on
+ *   14 Oct 2026 (the user: "Keep only age, don't want this other categories").
  * - LAN wins: only fifteen players have won one, almost all of them once.
  * - Majors played: the regional finals plus a handful of LANs, so the same
  *   order as FNCS grand finals played, give or take one.
@@ -125,13 +120,10 @@ export function playerCategories(
   roster: Roster,
   facts: Facts,
   socials: Socials | null,
-  majors: Majors | null = null,
 ): PlayerCategory[][] {
   const years = [...new Set(roster.players.flatMap((player) => Object.keys(player.earningsByYear)))]
     .map(Number)
     .sort();
-  const regional = new Set(facts.events.filter(isRegionalFinal).map((event) => event.name));
-  const globals = majors ? globalsAverages(roster, majors) : null;
   const kinds: PlayerCategory[][] = [
     [
       {
@@ -143,30 +135,6 @@ export function playerCategories(
       },
     ],
     [{ id: 'fncs-wins', title: 'FNCS wins', kind: 'count', value: (player) => player.fncsWins, display: count('title') }],
-    // Top 3s and top 10s in a regional final: the same finals an FNCS win counts.
-    [
-      {
-        id: 'fncs-podiums',
-        title: 'FNCS podiums',
-        kind: 'count',
-        value: (player) => facts.of(player.id).podium.filter((index) => isRegionalFinal(facts.events[index])).length,
-        display: count('podium'),
-      },
-      ...(majors
-        ? [
-            {
-              id: 'fncs-top10s',
-              title: 'FNCS top 10s',
-              kind: 'count' as const,
-              value: (player: RosterPlayer) =>
-                majors
-                  .resultsFor(player.id)
-                  .filter((result) => result.placement <= 10 && regional.has(result.tournament.name)).length,
-              display: count('top 10'),
-            },
-          ]
-        : []),
-    ],
     [
       {
         id: 'earnings',
@@ -183,31 +151,18 @@ export function playerCategories(
       value: (player: RosterPlayer) => player.earningsByYear[year] ?? 0,
       display: money,
     })),
-    // Whole years, so two players born the same year are level and right either way round.
+    // By birth date, the latest at the top: two players of one age can come
+    // up, months apart. Shown as the age to the month.
     [
       {
         id: 'age',
         title: 'Age',
-        kind: 'count',
-        lowFirst: true,
+        kind: 'date',
         direction: 'Youngest at the top',
-        value: (player) => player.age ?? 0,
-        display: count('year'),
+        value: (player) => (player.birthDate ? Math.floor(Date.parse(player.birthDate) / DAY) : 0),
+        display: ageToday,
       },
     ],
-    globals
-      ? [
-          {
-            id: 'globals-avg',
-            title: 'Average finish at the Globals',
-            kind: 'share' as const,
-            lowFirst: true,
-            direction: 'Best average at the top',
-            value: (player: RosterPlayer) => globals.get(player.id) ?? 0,
-            display: (value: number) => `avg ${Number.isInteger(value) ? value : value.toFixed(1)}`,
-          },
-        ]
-      : [],
     [
       {
         id: 'lan-apps',
@@ -241,12 +196,14 @@ const FOLLOWER_POOL: Record<Difficulty, number> = { easy: 60, medium: 200, hard:
 /**
  * Ten players from one category, close together in its ranking.
  *
- * Shares (money, followers, an average finish): rank the level's players best
+ * Shares (money, followers): rank the level's players best
  * first, start at a random place in the top `start` share, and walk on, taking
  * the next player whose value is at least `gap` away from the last one taken —
  * the smaller of the two at most `1 - gap` of the bigger, whichever end is best.
  *
- * Counts (finals, wins, podiums, age): the same, over the distinct values
+ * Dates (a birthday): the same walk, at least the level's `days` apart.
+ *
+ * Counts (finals, wins): the same, over the distinct values
  * rather than the players, one player per value. FNCS wins has fewer than ten
  * values to go round, so when the values run out a second player joins one of
  * them — at most `MAX_LEVEL_PAIRS` times, never three on one value.
@@ -262,7 +219,7 @@ function drawPlayers(
   difficulty: Difficulty,
   rng: Rng,
 ): Item[] | null {
-  const { start, gap } = LEVELS[difficulty];
+  const { start, gap, days } = LEVELS[difficulty];
   const better = category.lowFirst ? -1 : 1;
   // Shuffled first, so who stands for a crowded value is a draw, not the alphabet.
   const ranked = shuffle(rng, pool)
@@ -278,8 +235,11 @@ function drawPlayers(
   });
   const from = (length: number) => Math.floor(rng() * Math.max(1, Math.floor(length * start)));
 
-  if (category.kind === 'share') {
-    const apart = (a: number, b: number) => Math.min(a, b) <= Math.max(a, b) * (1 - gap);
+  if (category.kind === 'share' || category.kind === 'date') {
+    const apart =
+      category.kind === 'date'
+        ? (a: number, b: number) => Math.abs(a - b) >= days
+        : (a: number, b: number) => Math.min(a, b) <= Math.max(a, b) * (1 - gap);
     for (let attempt = 0; attempt < 12; attempt++) {
       const picked: typeof ranked = [];
       for (let i = from(ranked.length); i < ranked.length && picked.length < SIZE; i++) {
@@ -453,13 +413,13 @@ export function generatePuzzle(
   difficulty: Difficulty,
   seed: string = String(Date.now()),
   avoid: string | null = null,
-  /** Every finish at every major: tournaments from the whole field, FNCS top 10s, Globals averages. */
+  /** Every finish at every major: tournaments from the whole field. */
   majors: Majors | null = null,
   /** Fresh follower counts, when there are any — `data/socials.ts`. */
   socials: Socials | null = null,
 ): Puzzle | null {
   const rng = makeRng(seed);
-  const kinds: (PlayerCategory[] | 'tournament')[] = playerCategories(roster, facts, socials, majors)
+  const kinds: (PlayerCategory[] | 'tournament')[] = playerCategories(roster, facts, socials)
     .map((kind) => kind.filter((category) => !category.hidden))
     .filter((kind) => kind.length > 0);
   if (rankings) kinds.push('tournament');

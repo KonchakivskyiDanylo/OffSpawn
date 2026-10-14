@@ -19,7 +19,6 @@ import {
   asNamed,
   compare,
   createGame,
-  CUT,
   finisherName,
   lobbiesFor,
   record as roundRecord,
@@ -141,10 +140,8 @@ function Game({ roster, majors }: { roster: Roster; majors: Majors }) {
               );
             })}
           </ol>
-          {/* The same top 20 for every lobby: how far the results went would name the event. */}
-          <footer className="wl-board__foot tiny">
-            {secret.mode ? `${secret.mode}s` : 'Results'} · top {CUT}
-          </footer>
+          {/* The format only: "down to 39th" named the event by its field (the user, 14 Oct 2026). */}
+          <footer className="wl-board__foot tiny">{secret.mode ? `${secret.mode}s` : 'Results'}</footer>
         </section>
 
         {finished ? (

@@ -86,7 +86,7 @@ export function PastPuzzlesButton({
       </button>
       <Modal open={open} title="Earlier puzzles" onClose={close}>
         <p className="small muted" style={{ margin: 0 }}>
-          Missed a day? Each puzzle can be played once. Played late, it does not count towards your streak.
+          Missed a day? Each puzzle can be played once.
         </p>
         {games.map((game) => {
           const meta = getGame(game)!;

@@ -364,6 +364,22 @@ def build(BASE):
                 if n in MAJORS and r == 1:
                     org_majors[team] += 1
 
+    # The day each player's prize money from tournament results first reached
+    # $1M, for Tenite's "first 10 to $1M in career earnings" (the user, 14 Oct
+    # 2026), into facts.json as `million`. Counted from the placements in date
+    # order, so it is the results' running total, not the published figure.
+    MILLION = []
+    running = Counter()
+    for t, r, m, pages in sorted(PLACED, key=lambda placed: day_of(placed[0]) or '9999'):
+        day = day_of(t)
+        if not day:
+            continue
+        for page, team in pages:
+            before = running[page]
+            running[page] += m
+            if before < 1_000_000 <= running[page]:
+                MILLION.append({'id': page, 'date': day})
+
     # Career earnings uses the published column, not the sum of placements — it is
     # the number Liquipedia shows on the player page and the one people remember.
     career = Counter({p['pagename']: float(p['earnings'] or 0) for p in PLAYABLE})
@@ -904,6 +920,24 @@ def build(BASE):
                      f'Won a {mode.lower()} Div Cup final in this region',
                      {k for p in pages if DIV[p].get('mode') == mode
                       for r, members in div_ranked[p] if r == 1 for k in members})
+
+    # Every Div Cup final won, with its day and region, into facts.json as
+    # `divcups`: Tenite's first and last winners boards are built from it in
+    # the browser (the user, 14 Oct 2026: "Last 10 different players to win eu
+    # div cup", by region and by year). A winner with no Liquipedia page stays
+    # '?Name', so the browser can tell a board it cannot fill. A final with a
+    # shared first place, or none yet, is left out.
+    DIVCUP_WINS = []
+    for w in WEEKS:
+        for p in _weeks[w]:
+            firsts = [members for r, members in div_ranked[p] if r == 1]
+            if len(firsts) != 1:
+                continue
+            DIVCUP_WINS.append({'date': day_of(DIV[p]), 'region': page_server(DIV[p]), 'season': w[0],
+                                'practice': w[1], 'week': w[2], 'mode': DIV[p].get('mode'),
+                                'players': list(firsts[0])})
+    DIVCUP_WINS.sort(key=lambda win: (win['date'] or '', win['region']))
+
     # "Played every one of them", split by region: year-wide, the FNCS lists
     # ran to 367 names and the Div Cup ones to 384, too many for 90 seconds
     # (the user, 1 Oct 2026). A player at every round, in whichever regions,
@@ -1949,8 +1983,10 @@ def build(BASE):
     )
 
     # `lists`: List's Div Cup and Evaluation lists, finished in cell 2.
+    # `divcups`: every Div Cup final won, for Tenite's first and last boards.
+    # `million`: the day each player's results first reached $1M.
     payload = {"generated": TODAY, "events": events, "players": players_out, "season": season,
-               "lists": PLAYER_LISTS}
+               "lists": PLAYER_LISTS, "divcups": DIVCUP_WINS, "million": MILLION}
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
 

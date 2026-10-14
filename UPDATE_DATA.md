@@ -216,41 +216,6 @@ shows when each platform was last fetched and has a **Fetch now** button.
 Twitch only stays logged in while the server keeps using it (daily); if the
 page ever says "Not on the site" for Twitch, log in again there.
 
-## Updating from the dashboard (no laptop)
-
-`/analytics/data` shows how old the data is and how many Liquipedia pages
-changed since (from the webhook below). Its **Update now** button runs steps
-1, 3 and 5 on GitHub Actions (`.github/workflows/update-data.yml`), which
-commits the new files; Heroku then deploys them. It also runs by itself every
-Monday morning.
-
-**Once, on GitHub** (the repository → Settings → Secrets and variables →
-Actions → New repository secret):
-
-| Secret | Value |
-| --- | --- |
-| `LIQUIPEDIA_API_KEY` | the same key as on your laptop |
-| `LIQUIPEDIA_USER_AGENT` | the same as on your laptop |
-| `OFFSPAWN_URL`, `OFFSPAWN_ADMIN_PASSWORD` | optional: the webhook's pages, as in step 3 of "webhooks" |
-| `DATA_PUSH_TOKEN` | optional: a token with "Contents: read and write". Without it the data commit does not run the Checks workflow, so if Heroku waits for CI it may not deploy |
-
-**Once, for the button**: create a fine-grained token on GitHub (Settings →
-Developer settings → Fine-grained tokens) for this repository only, with
-"Actions: read and write". Then on Heroku (Settings → Config Vars):
-
-| Key | Value |
-| --- | --- |
-| `DATA_UPDATE_TOKEN` | that token |
-| `DATA_UPDATE_REPO` | `owner/name` of the repository |
-
-**The first run** has no raw dump on GitHub, so it reads everything: about
-eight hours, longer than one run may last. It keeps what it fetched; press
-Update now again when it stops, and it carries on. After that a run takes about
-ten minutes. GitHub forgets the dump after seven days without a run, which the
-weekly run prevents.
-
----
-
 ## If something goes wrong
 
 | You see | It means | Do |

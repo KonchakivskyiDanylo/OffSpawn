@@ -20,7 +20,7 @@ import { DAILY_GAMES, unfrozen, unpinned, type DailyGame, type DailySet } from '
 import { Socials } from '@/data/socials';
 import { movedPath } from '@/games/moved';
 import { SITE_HOST, SITE_URL } from '@/lib/site';
-import { dataStatus, startDataUpdate } from './data-status';
+import { dataStatus } from './data-status';
 import { refreshSocials, scheduleSocials, servedSocials, socialsStatus, startTwitchLogin } from './socials';
 import { hourKey, openStore, type PageChange } from './store';
 
@@ -58,8 +58,6 @@ import { hourKey, openStore, type PageChange } from './store';
  *                     webhook route does not exist without it
  *   YOUTUBE_API_KEY, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET
  *                     the follower counts — see socials.ts
- *   DATA_UPDATE_TOKEN, DATA_UPDATE_REPO, DATA_UPDATE_BRANCH
- *                     the Update button on /analytics/data — see data-status.ts
  */
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -531,7 +529,7 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
   }
   if (route === 'GET /api/admin/support') return send(res, 200, await store.support());
   if (route === 'GET /api/admin/errors') return send(res, 200, await store.errors(200));
-  // How old the Liquipedia data is, and the Update button — see data-status.ts.
+  // How old the Liquipedia data is — see data-status.ts.
   if (route === 'GET /api/admin/data') {
     const { data } = await dailyEnv();
     const { EXPORT_DATE } = await import('@/data/liquipedia/roster');
@@ -547,14 +545,6 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
         webhook: Boolean(WEBHOOK_SECRET),
       }),
     );
-  }
-  if (route === 'POST /api/admin/data/update') {
-    try {
-      await startDataUpdate();
-    } catch (error) {
-      throw new HttpError(502, (error as Error).message);
-    }
-    return send(res, 202, { started: true });
   }
   // The webhook's pings after `after`, oldest first, for the data updater.
   if (route === 'GET /api/admin/liquipedia') {

@@ -8,9 +8,9 @@ import type { Level } from '@/games/shared/levels';
 import { lobbiesOf, lobbyTitle, type Lobby } from '@/games/shared/lobbies';
 
 /**
- * Pure logic for Which Lobby?: a tournament's top 20 revealed from the bottom
- * up — an 18th, a 14th, a 7th, the podium, the winner — until you name the
- * tournament.
+ * Pure logic for Which Lobby?: a tournament's leaderboard revealed from the
+ * bottom up — a 40th, a 20th, a 7th, the podium, the winner — until you name
+ * the tournament.
  *
  * Built to the user's roadmap (2 Oct 2026): placements one by one, the round
  * over when you name it or the placements run out. A guess is a round and a
@@ -64,33 +64,32 @@ export function asNamed(lobby: Lobby): Secret {
 }
 
 /**
- * The deepest place a leaderboard shows, whatever the size of the field.
+ * Bands of the leaderboard, bottom to top, one finisher drawn from each: the
+ * back half, then ever closer to the top, then 2nd–3rd, then the winner. Sized
+ * by how far the results go, so a 33-team trios final gets six and a
+ * 100-player solo final seven.
  *
- * The reveal used to start in the back half and so printed places down to the
- * last — "50th" for a duos final, "39th" for the Reload Elite Series at the
- * 2026 Esports World Cup, a field no other major has (the user, 14 Oct 2026:
- * "Don't write down to 50, it can be a spoiler. Like ewc had an unique format
- * and 39 teams, which is obvious just from this"). The smallest field on
- * record is 22 (Chapter 2 Season 1's Asia squads), so every one of the 186
- * reaches 20th.
+ * For a day (14 Oct 2026) these were a fixed top 20, so the places would not
+ * give the field's size away; the user asked for this back, with only the
+ * footer's "down to 39th" taken out ("that's not what I meant… Just delete
+ * this message").
  */
-export const CUT = 20;
-
-/**
- * Bands of the leaderboard, bottom to top, one finisher drawn from each, the
- * same for every lobby: the top 20 in narrowing steps, then 2nd–3rd, then
- * the winner. Fixed rather than sized to the field, so neither the places nor
- * how many finishers there are say how big it was.
- */
-export const BANDS: readonly (readonly [number, number])[] = [
-  [17, CUT],
-  [13, 16],
-  [9, 12],
-  [6, 8],
-  [4, 5],
-  [2, 3],
-  [1, 1],
-];
+export function bands(size: number): [number, number][] {
+  const at = (share: number) => Math.max(1, Math.round(size * share));
+  const out: [number, number][] = [
+    [at(0.55) + 1, size],
+    [at(0.35) + 1, at(0.55)],
+    [at(0.2) + 1, at(0.35)],
+    [at(0.1) + 1, at(0.2)],
+  ];
+  let floor = at(0.1) + 1;
+  if (floor > 4) {
+    out.push([4, floor - 1]);
+    floor = 4;
+  }
+  out.push([2, Math.min(3, floor - 1)], [1, 1]);
+  return out.filter(([lo, hi]) => lo <= hi && hi <= size);
+}
 
 /** Players on a team, by Liquipedia's format label. */
 const TEAM_SIZE: Record<string, number> = { Solo: 1, Duo: 2, Trio: 3, Squad: 4 };
@@ -151,7 +150,7 @@ export function cluesFor(
 ): Finisher[] {
   const field = wholeTeams(lobby, majors, byId);
   const out: Finisher[] = [];
-  for (const [lo, hi] of BANDS) {
+  for (const [lo, hi] of bands(lobby.size)) {
     const options = field.filter((finisher) => finisher.placement >= lo && finisher.placement <= hi);
     if (options.length) out.push(pickFrom(options, LEVELS[level].pick, rng));
   }

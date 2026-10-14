@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { puzzleLabel, shortDate } from '@/daily/day';
-import { useDailyLog } from '@/daily/progress';
 import { isLiveDaily, type DailyGame } from '@/daily/types';
 import { puzzleHref, usePuzzleDay } from '@/daily/useDay';
 import { DEV_TOGGLE } from '@/daily/useDailyRound';
@@ -51,9 +50,6 @@ export function GameShell({
 }) {
   const daily = isLiveDaily(game.id) ? dailyProp : undefined;
   const puzzle = usePuzzleDay();
-  // How this browser played the day on show, for the archive's note. Read for
-  // every game, because a hook cannot wait on the daily check.
-  const played = useDailyLog(game.id as DailyGame)[puzzle.day];
   const seenKey = `seen-rules:${game.id}`;
   const [showRules, setShowRules] = useState(() => !readLocal(seenKey, false));
 
@@ -110,13 +106,8 @@ export function GameShell({
         </div>
         {daily?.on && puzzle.past ? (
           <p className="daily-past-note">
-            📅 The puzzle from {shortDate(puzzle.day)} —{' '}
-            {!played
-              ? 'played late, it does not count towards your streak.'
-              : played.late
-                ? 'played late, so it did not count towards your streak.'
-                : 'you played it on the day.'}{' '}
-            <Link to={puzzleHref(game.slug)}>Today’s puzzle →</Link>
+            {/* Just the day (the user, 14 Oct 2026: "Just write puzzles from . Today's puzzle, no of this played late"). */}
+            📅 The puzzle from {shortDate(puzzle.day)} · <Link to={puzzleHref(game.slug)}>Today’s puzzle →</Link>
           </p>
         ) : null}
       </div>

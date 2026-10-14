@@ -58,6 +58,8 @@ import { poolBoards } from '@/games/tenaball/pool-boards';
 import { derivedBoards } from '@/games/tenaball/derived-boards';
 import { globalsBoards, globalsEvents } from '@/games/tenaball/globals-boards';
 import { socialBoards } from '@/games/tenaball/social-boards';
+import { recordBoards } from '@/games/tenaball/record-boards';
+import { winnerBoards } from '@/games/tenaball/winner-boards';
 import * as griefer from '@/games/impostor/engine';
 import * as ttt from '@/games/tic-tac-toe/engine';
 import * as connections from '@/games/connections/engine';
@@ -694,6 +696,35 @@ if (rankings) {
   // The Globals boards are built in the browser from career_path.json, and play like any shipped board.
   const globals = majors ? globalsBoards(majors, roster) : [];
   notes.push(`tenaball: ${rankings.boards.length} boards, ${globals.length} Globals boards`);
+
+  // The winners and records boards of 14 Oct 2026, built from facts.json: each
+  // the user asked for is there, and every one is ten rows, a 10th not level
+  // with an 11th, and (but for the exactly-ten boards) an 11th to name.
+  if (facts) {
+    const winners = winnerBoards(facts, roster);
+    const records = recordBoards(facts, roster);
+    for (const id of ['first-million', 'fncs-first-to:5', 'fncs-debut', 'fncs-youngest', 'fncs-oldest', 'fncs-long-road', 'fncs-comebacks', 'fncs-in-a-row', 'pairs-major-titles', 'countries-fncs-winners', 'born:2006', 'fncs-last:Europe', 'divcup-last:Europe', 'fncs-win-rate', 'fncs-win-rate:Europe', 'fncs-fewest-finals:Europe']) {
+      check([...winners, ...records].some((board) => board.id === id), `tenaball: no "${id}" board`);
+    }
+    for (const board of [...winners, ...records]) {
+      check(board.rows.length === tenaball.SLOTS, `tenaball: ${board.id} has ${board.rows.length} rows`);
+      check(board.id.includes('-all:') || Boolean(board.next.key), `tenaball: ${board.id} has no 11th`);
+    }
+    notes.push(`tenaball: ${winners.length} FNCS and Div Cup winners boards, ${records.length} records`);
+    // On the pairs board one player is on several rows: naming them fills each row in turn.
+    const pairsBoard = records.find((board) => board.id === 'pairs-major-titles');
+    const shared = pairsBoard?.rows.flatMap((row) => row.members ?? []).find((member, i, all) => all.findIndex((m) => m.key === member.key) !== i);
+    if (pairsBoard && shared) {
+      let game = tenaball.createGame(pairsBoard, 'easy');
+      for (const row of pairsBoard.rows) {
+        if (!row.members?.some((member) => member.key === shared.key)) continue;
+        for (const member of row.members) game = tenaball.applyGuess(game, member.key, member.label).state;
+      }
+      const rows = pairsBoard.rows.filter((row) => row.members?.some((member) => member.key === shared.key)).length;
+      const filled = pairsBoard.rows.filter((row, i) => row.members?.some((member) => member.key === shared.key) && game.found.has(i + 1)).length;
+      check(filled === rows, `tenaball: ${shared.label} filled ${filled} of their ${rows} pairs`);
+    }
+  }
   const byGroup = new Map<string, number>();
   for (const board of [...rankings.boards, ...globals]) {
     byGroup.set(board.group, (byGroup.get(board.group) ?? 0) + 1);
@@ -1578,7 +1609,11 @@ if (facts) {
     const perValue = new Map<number, number>();
     for (const value of values) perValue.set(value, (perValue.get(value) ?? 0) + 1);
     check(Math.max(...perValue.values()) <= 2, `${tag} has three players on one value`);
-    if (puzzle.id.startsWith('earnings') || puzzle.id === 'globals-avg') {
+    if (puzzle.id === 'age') {
+      const days = pyramid.LEVELS[level].days;
+      check(values.every((value, i) => i === 0 || Math.abs(value - values[i - 1]) >= days), `${tag} has two birthdays under ${days} days apart`);
+    }
+    if (puzzle.id.startsWith('earnings')) {
       const gap = pyramid.LEVELS[level].gap;
       check(
         values.every((value, i) => i === 0 || Math.min(value, values[i - 1]) <= Math.max(value, values[i - 1]) * (1 - gap) + 1e-9),
@@ -1628,7 +1663,7 @@ if (facts) {
   // Every player category in the draw builds on every level, not just the ones
   // the forty seeds above happen to pick; the hidden ones are never drawn.
   {
-    const categories = pyramid.playerCategories(roster, facts, null, majors).flat();
+    const categories = pyramid.playerCategories(roster, facts, null).flat();
     const hidden = new Set(categories.filter((category) => category.hidden).map((category) => category.id));
     // The user, 14 Oct 2026: "remove category lan appearances for now".
     check(hidden.has('lan-apps'), 'pyramid: LAN appearances is back in the draw');
@@ -1653,8 +1688,10 @@ if (facts) {
       check(built.every((n) => n === 20), `pyramid: "${category.title}" built ${built.join('/')} of 20 on Easy/Medium/Hard`);
       if (!category.id.startsWith('earnings:')) rates.push(`${category.id} ${built.join('/')}`);
     }
-    for (const id of ['fncs-podiums', 'age', ...(majors ? ['fncs-top10s', 'globals-avg'] : [])]) {
-      check(categories.some((category) => category.id === id && !category.hidden), `pyramid: no "${id}" category`);
+    // Of the categories tried on 14 Oct 2026 only age stayed.
+    check(categories.some((category) => category.id === 'age' && !category.hidden), 'pyramid: no age category');
+    for (const id of ['fncs-podiums', 'fncs-top10s', 'globals-avg']) {
+      check(!categories.some((category) => category.id === id), `pyramid: "${id}" is back`);
     }
     notes.push(`pyramid categories, built of 20 on Easy/Medium/Hard: ${rates.join(', ')}; hidden: ${[...hidden].join(', ')}`);
   }
@@ -1775,8 +1812,8 @@ if (facts && orgs) {
     `bingo: decks of ${levels.map((level) => bingo.LEVELS[level].deck).join('/')}, not 40/35/30`,
   );
   check(
-    levels.map((level) => bingo.LEVELS[level].seconds).join() === '120,90,60',
-    `bingo: clocks of ${levels.map((level) => bingo.LEVELS[level].seconds).join('/')}s, not 120/90/60`,
+    levels.map((level) => bingo.LEVELS[level].seconds).join() === '120,105,90',
+    `bingo: clocks of ${levels.map((level) => bingo.LEVELS[level].seconds).join('/')}s, not 120/105/90`,
   );
   const clockText = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   const difficultyRules = getGame('bingo')?.sections?.find((section) => section.title === 'Difficulty')?.items ?? [];
@@ -2089,6 +2126,10 @@ if (teammates) {
       if (entry.rank > 1 && entry.parts.stage === 1) {
         check(entry.rank <= 10, `contextinho: ${entry.player.name}, ${secret.name}'s partner at two big events or on a podium, ranks #${entry.rank}`);
       }
+      // A big event won together — a World Cup, a Globals — is one of the three closest (#2–#4).
+      if (entry.rank > 1 && entry.parts.champions >= 1) {
+        check(entry.rank <= 4, `contextinho: ${entry.player.name}, who won a big event with ${secret.name}, ranks #${entry.rank}`);
+      }
       // And the top 3 is never someone the secret has not played with.
       if (entry.rank > 1 && entry.rank <= 3 && entry.parts.teammates === 0 && entry.parts.titles === 0 && entry.parts.stage === 0) {
         check(false, `contextinho: ${entry.player.name} is #${entry.rank} for ${secret.name} without ever teaming up`);
@@ -2121,6 +2162,9 @@ if (teammates) {
   const worstNeighbour = Math.max(...neighbours.map((p) => byCountry.get(p.id)!.rank));
   check(worstNeighbour === compatriots.length + neighbours.length + 1, `contextinho: with country alone, a neighbour of ${secret.name} ranks ${worstNeighbour}`);
   check(contextinho.countryCloseness('LV', 'EE') === contextinho.countryCloseness('DE', 'AT') && contextinho.countryCloseness('FR', 'BR') === 0, 'contextinho: the scenes are not as documented');
+  // Outside a scene, distance: Germany and Poland are close, Portugal and Russia are not.
+  const dePl = contextinho.countryCloseness('DE', 'PL');
+  check(dePl > 0.25 && dePl < 0.5 && contextinho.countryCloseness('PT', 'RU') === 0, `contextinho: distance reads DE–PL ${dePl.toFixed(2)}`);
   notes.push(
     `contextinho: ${pool.length} Easy secrets; their top teammate ranks #${(mateRank / Math.max(1, tried)).toFixed(1)} on average` +
       (partnerRanks.length ? `, an FNCS-winning partner #${(partnerRanks.reduce((a, b) => a + b, 0) / partnerRanks.length).toFixed(1)} (worst #${Math.max(...partnerRanks)})` : ''),
@@ -2186,15 +2230,6 @@ if (majors) {
   check(parseLobby('FNCS 2023 - Major 2:  Europe - Grand Finals').round === 'FNCS 2023 - Major 2', 'which-lobby: Major 2 parses wrong');
   check(roundLabel('C2S1: FNCS') === 'C2S1' && roundLabel('FNCS: Chapter 2 Season 2') === 'C2S2', 'which-lobby: round labels wrong');
   const byId = new Map(roster.players.map((p) => [p.id, p]));
-  // The cut sits inside every field, so no lobby's board is shorter than another's.
-  const smallest = Math.min(...lobbies.map((l) => l.size));
-  check(whichLobby.CUT <= smallest, `which-lobby: the cut (${whichLobby.CUT}) is deeper than the smallest field (${smallest})`);
-  check(
-    whichLobby.BANDS[0][1] === whichLobby.CUT &&
-      whichLobby.BANDS[whichLobby.BANDS.length - 1][0] === 1 &&
-      whichLobby.BANDS.every(([lo, hi], j) => lo <= hi && (j === 0 || hi === whichLobby.BANDS[j - 1][0] - 1)),
-    'which-lobby: the bands do not tile the top 20 bottom up',
-  );
   // A finisher is a whole team: as many players as the format says, read here
   // from Liquipedia's label rather than from the engine.
   const TEAM: Record<string, number> = { Solo: 1, Duo: 2, Trio: 3, Squad: 4 };
@@ -2203,7 +2238,6 @@ if (majors) {
     const pool = whichLobby.lobbiesFor(majors, level);
     check(pool.length >= (level === 'easy' ? 60 : 100), `which-lobby ${level}: only ${pool.length} lobbies`);
     let clues = 0;
-    let full = 0;
     for (const [i, lobby] of pool.entries()) {
       const team = TEAM[lobby.mode ?? ''];
       const whole = (f: { players: readonly unknown[] }) => f.players.length === team;
@@ -2211,13 +2245,9 @@ if (majors) {
         const game = whichLobby.createGame(lobby, majors, byId, level, `wl-${i}-${seed}`);
         const places = game.clues.map((f) => f.placement);
         const tag = `which-lobby ${level} ${lobby.name}`;
-        if (seed === 0) {
-          clues += places.length;
-          if (places.length === whichLobby.BANDS.length) full++;
-        }
+        if (seed === 0) clues += places.length;
         check(places.length >= 4, `${tag}: only ${places.length} finishers`);
         check(places.every((p, j) => j === 0 || p < places[j - 1]), `${tag}: the finishers do not climb (${places.join(', ')})`);
-        check(places.every((p) => p <= whichLobby.CUT), `${tag}: a finisher below ${ordinal(whichLobby.CUT)} (${places.join(', ')})`);
         const broken = game.clues.find((f) => !whole(f));
         check(!broken, `${tag}: ${broken && whichLobby.finisherName(broken)} at ${broken?.placement} is not a whole ${lobby.mode}`);
         check(
@@ -2227,9 +2257,7 @@ if (majors) {
         if (i === 0 && seed === 0) checkClueRound(game, tag, pool.filter((l) => l.name !== lobby.name).map(whichLobby.asNamed));
       }
     }
-    // Seven for nearly every lobby, whatever its field: fewer only where a band has no whole team.
-    check(full >= pool.length * 0.95, `which-lobby ${level}: only ${full} of ${pool.length} lobbies show all ${whichLobby.BANDS.length} finishers`);
-    notes.push(`which-lobby ${level}: ${pool.length} lobbies, ${(clues / pool.length).toFixed(2)} finishers each, ${full} with all ${whichLobby.BANDS.length}`);
+    notes.push(`which-lobby ${level}: ${pool.length} lobbies, ${(clues / pool.length).toFixed(2)} finishers each`);
   }
   const [a, b] = [lobbies[2], lobbies[lobbies.length - 1]];
   check(whichLobby.compare(b, a).when === 'earlier' && whichLobby.compare(a, b).when === 'later', 'which-lobby: earlier and later are the wrong way round');
@@ -2299,14 +2327,15 @@ if (facts) {
     notes.push(`rewind ${level}: ${built}/40 deals of ${config.size}, ${config.gapDays}+ days apart, ${seen.size} kinds seen`);
   }
   notes.push(`rewind: ${moments.length} moments — ${[...kinds].map(([k, n]) => `${k} ${n}`).join(', ')}`);
-  // Lives: Hard ends on one imperfect check, Medium on two, a locked moment stays put.
+  // Lives: Medium and Hard end on the second imperfect check, a locked moment stays put.
   const hand = rewind.deal(moments, 'medium', makeRng('rw-lives'))!;
   const unsorted = (level: Level) => {
     let game = rewind.createGame(hand, level, 'lives');
     if (rewind.inPlace(game) === hand.length) game = rewind.swap(game, 0, 1);
     return game;
   };
-  check(rewind.check(unsorted('hard')).status === 'lost', 'rewind: hard survived an imperfect check');
+  const hard = rewind.check(unsorted('hard'));
+  check(hard.status === 'playing' && hard.lives === 1, 'rewind: hard lost on the first imperfect check');
   const medium = rewind.check(unsorted('medium'));
   check(medium.status === 'playing' && medium.lives === 1, 'rewind: medium lost on the first imperfect check');
   const lockedAt = medium.order.findIndex((m) => medium.locked.has(m.id));
@@ -3004,7 +3033,7 @@ if (socials.platforms.length > 0) {
       check(new Set(secrets).size === secrets.length, `daily ${day}: one player is the secret in two games`);
 
       // Tenaball: rebuilds, and a snapshot taken mid-round comes back the same.
-      const tb = p.tenaball && tenaballDaily.restoreDaily(p.tenaball, rankings, roster, socials, majors, null);
+      const tb = p.tenaball && tenaballDaily.restoreDaily(p.tenaball, rankings, roster, socials, majors, null, facts);
       check(
         Boolean(tb) && tb!.difficulty === 'hard' && tb!.lives === tenaball.DAILY_LIVES && tb!.maxLives === tenaball.DAILY_LIVES,
         `daily ${day}: Tenaball did not rebuild on Hard with ${tenaball.DAILY_LIVES} lives`,
@@ -3013,7 +3042,7 @@ if (socials.platforms.length > 0) {
         const first = tenaball.slotsIn(tb)[0].members[0];
         const one = tenaball.applyGuess(tb, first.key, first.label).state;
         const wrong = tenaball.applyGuess(one, '__nobody__', 'Nobody').state;
-        const back = tenaballDaily.restoreDaily(p.tenaball!, rankings, roster, socials, majors, tenaballDaily.snapshot(wrong));
+        const back = tenaballDaily.restoreDaily(p.tenaball!, rankings, roster, socials, majors, tenaballDaily.snapshot(wrong), facts);
         check(back?.lives === wrong.lives && back?.found.size === wrong.found.size && tenaball.namedIn(back, 1).has(first.key), `daily ${day}: a saved Tenaball round did not come back`);
         const grid = tenaballDaily.shareGrid(wrong);
         check(grid.length === 3, `daily ${day}: Tenaball's share grid is not two rows and the lives`);
@@ -3021,20 +3050,20 @@ if (socials.platforms.length > 0) {
         // A round saved on the old three lives: still going, it gets the two new
         // ones; finished, it keeps its hearts out of three.
         const old = { ...tenaballDaily.snapshot(wrong), lives: 2, maxLives: undefined };
-        const resumed = tenaballDaily.restoreDaily(p.tenaball!, rankings, roster, socials, majors, old);
+        const resumed = tenaballDaily.restoreDaily(p.tenaball!, rankings, roster, socials, majors, old, facts);
         check(resumed?.lives === 4 && resumed.maxLives === tenaball.DAILY_LIVES, `daily ${day}: an old three-life Tenaball round did not get its two new lives`);
-        const ended = tenaballDaily.restoreDaily(p.tenaball!, rankings, roster, socials, majors, { ...old, lives: 0, status: 'lost' });
+        const ended = tenaballDaily.restoreDaily(p.tenaball!, rankings, roster, socials, majors, { ...old, lives: 0, status: 'lost' }, facts);
         check(ended?.lives === 0 && ended.maxLives === tenaball.HARD_LIVES, `daily ${day}: a finished three-life Tenaball round changed its hearts`);
 
         // Pinned on its day: the board plays from the descriptor, whatever the
         // data says later, and a round saved before the pin still comes back.
-        const pinned = tenaballDaily.freezeDaily(p.tenaball!, rankings, roster, socials, majors, day)!;
+        const pinned = tenaballDaily.freezeDaily(p.tenaball!, rankings, roster, socials, majors, day, facts)!;
         check(
-          Boolean(pinned?.frozen) && tenaballDaily.freezeDaily(pinned, rankings, roster, socials, majors, day) === null,
+          Boolean(pinned?.frozen) && tenaballDaily.freezeDaily(pinned, rankings, roster, socials, majors, day, facts) === null,
           `daily ${day}: Tenite's board did not pin, or pinned twice`,
         );
         const moved = { ...pinned.frozen!, rows: pinned.frozen!.rows.map((row, i) => (i === 0 ? { ...row, display: 'pinned' } : row)) };
-        const fromPin = tenaballDaily.restoreDaily({ ...pinned, frozen: moved }, rankings, roster, socials, majors, null);
+        const fromPin = tenaballDaily.restoreDaily({ ...pinned, frozen: moved }, rankings, roster, socials, majors, null, facts);
         check(fromPin?.board.rows[0].display === 'pinned', `daily ${day}: a pinned Tenite day rebuilt from today's data`);
         check(
           !pinned.frozen!.id.startsWith('tournament:') ? pinned.frozen!.asOf !== undefined : pinned.frozen!.asOf === undefined,
@@ -3062,7 +3091,7 @@ if (socials.platforms.length > 0) {
     const listIds = history.map((set) => set.puzzles.list?.list);
     check(new Set(boards).size === DAYS && new Set(listIds).size === DAYS, `daily: a Tenaball board or a List came back within ${DAYS} days`);
     // Neighbouring days look different: no kind twice within KIND_GAP days, no Tenaball family within FAMILY_GAP.
-    const boardById = new Map(tenaballDaily.dailyBoards(rankings, roster, socials, majors).map((board) => [board.id, board]));
+    const boardById = new Map(tenaballDaily.dailyBoards(rankings, roster, socials, majors, facts).map((board) => [board.id, board]));
     const listById = new Map(lists.map((entry) => [entry.id, entry]));
     const clashes = (ids: (string | undefined)[], key: (id: string) => string | null, gap: number) =>
       ids.flatMap((id, i) =>

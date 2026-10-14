@@ -144,7 +144,12 @@ export function applyGuess(
   if (!key) return { state, outcome: { kind: 'unknown' } };
 
   const slots = slotsIn(state);
-  let index = slots.findIndex((slot) => slot.members.some((member) => member.key === key));
+  // A player can be on more than one row of a pairs board — Peterbot & Pollo,
+  // Peterbot & Cold — so the name goes to a row still missing it, one already
+  // begun first; only when every row of theirs has it is it a repeat.
+  const holding = slots.flatMap((slot, i) => (slot.members.some((member) => member.key === key) ? [i] : []));
+  const open = holding.filter((i) => !namedIn(state, i + 1).has(key));
+  let index = open.length ? (open.find((i) => namedIn(state, i + 1).size > 0) ?? open[0]) : (holding[0] ?? -1);
   let wanted = index >= 0 ? slots[index].members : [];
   const last = slots[slots.length - 1];
   if (index < 0 && last.also?.some((member) => member.key === key)) {

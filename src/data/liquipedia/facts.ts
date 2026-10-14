@@ -71,6 +71,22 @@ export interface PlayerList {
   players: string[];
 }
 
+/** One Div Cup final won: the day, the region's final, and the winning team. */
+export interface DivCupWin {
+  /** "YYYY-MM-DD". */
+  date: string;
+  /** Europe, NA Central, NA West, Brazil, Asia, Middle East or Oceania. */
+  region: string;
+  /** "C7S4". */
+  season: string;
+  /** One of C6S4's Practice Cups rather than a week of the season. */
+  practice: boolean;
+  week: number;
+  mode: string | null;
+  /** Roster ids; a winner with no Liquipedia page is "?Name". */
+  players: string[];
+}
+
 interface RawPayload {
   generated: string;
   events: RawEvent[];
@@ -79,6 +95,10 @@ interface RawPayload {
   season?: RawSeason;
   /** Absent from a file written before the Div Cup lists existed. */
   lists?: PlayerList[];
+  /** Absent from a file written before 14 Oct 2026. */
+  divcups?: DivCupWin[];
+  /** Absent from a file written before 14 Oct 2026. */
+  million?: { id: string; date: string }[];
 }
 
 /** A player's finish at one season event, and who they played it with. */
@@ -181,6 +201,13 @@ export class Facts {
   readonly season: Season | null;
   /** Empty until `build_data.py` has written the Div Cup lists. */
   readonly lists: readonly PlayerList[];
+  /** Every Div Cup final won, oldest first; empty in a file written before 14 Oct 2026. */
+  readonly divcups: readonly DivCupWin[];
+  /**
+   * The day each player's prize money from tournament results first reached
+   * $1M, oldest first ("?Name" for a winner with no page); empty before 14 Oct 2026.
+   */
+  readonly million: readonly { id: string; date: string }[];
 
   private readonly byPlayer = new Map<string, PlayerFacts>();
   /** event index -> player ids who were there. Built lazily, once. */
@@ -215,6 +242,8 @@ export class Facts {
     }
     this.season = payload.season ? readSeason(payload.season) : null;
     this.lists = payload.lists ?? [];
+    this.divcups = payload.divcups ?? [];
+    this.million = payload.million ?? [];
   }
 
   /** This player's facts, or an all-zero record when they have no results. */

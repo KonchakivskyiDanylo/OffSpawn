@@ -105,7 +105,8 @@ export const LEVELS: Record<
     gapDays: 30,
     tiers: ['easy', 'medium', 'hard'],
     kinds: ALL_KINDS,
-    lives: 1,
+    // Ten moments on one check was too much (the user, 14 Oct 2026: 2 lives, "do it").
+    lives: 2,
   },
 };
 

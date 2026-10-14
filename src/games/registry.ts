@@ -281,7 +281,7 @@ export const GAMES: GameMeta[] = [
       rules: [
         '5 lives; every wrong guess costs one, 11th place included.',
         'On a duos or trios board a slot is a whole team, filled once everyone on it is named.',
-        'The numbers are as of the date under the title, and a day’s board never changes.',
+        'The numbers are as of the date beside the title, and a day’s board never changes.',
         '“What counts here” under the board explains its terms.',
       ],
     },
@@ -548,14 +548,13 @@ export const GAMES: GameMeta[] = [
     tagline: 'Sort ten players into order, best at the top.',
     icon: '🔺',
     intro: [
-      'Ten players, one category — FNCS finals, titles or podiums, earnings, age, Globals finishes, or ten finishers at one tournament. Sort them into the pyramid in the order the card asks, then check.',
+      'Ten players, one category — FNCS finals or titles, earnings, age, or ten finishers at one tournament. Sort them into the pyramid in the order the card asks, then check.',
       'Players in the right place turn green and lock.',
     ],
     rules: [
       'Tap two players to swap them, or drag one onto another.',
       'Players level on the value can go either way round.',
-      'FNCS podiums and top 10s count regional finals only.',
-      'Average Globals finish counts players with two or more Globals.',
+      'Age goes by birth date, youngest at the top.',
     ],
     sections: [
       {
@@ -567,7 +566,7 @@ export const GAMES: GameMeta[] = [
         ],
       },
     ],
-    terms: ['fncs-final', 'fncs-title', 'global', 'earnings', 'age'],
+    terms: ['fncs-final', 'fncs-title', 'earnings', 'age'],
     // New 30 Sep 2026, not hosted yet.
     hidden: true,
     Component: lazy(() => import('./pyramid/PyramidGame')),
@@ -601,8 +600,8 @@ export const GAMES: GameMeta[] = [
         title: 'Difficulty',
         items: [
           'Easy 🟢 — famous players: a 40-player deck or 2:00 on the clock, 3 lives.',
-          'Medium 🟡 — the regulars too: 35 players or 1:30, 3 lives.',
-          'Hard 🔴 — anyone: 30 players or 1:00, 2 lives.',
+          'Medium 🟡 — the regulars too: 35 players or 1:45, 3 lives.',
+          'Hard 🔴 — anyone: 30 players or 1:30, 2 lives.',
         ],
       },
     ],
@@ -683,7 +682,7 @@ export const GAMES: GameMeta[] = [
     icon: '🌡️',
     intro: [
       'Find the secret player. Every guess gets a rank: how close that player is to the secret one, out of everyone on record. #1 is the answer.',
-      'Close means alike. Teammates rank highest, above all an FNCS won or a major LAN played together; then the same majors, years and organisations, nationality (a neighbouring country counts half), age and region.',
+      'Close means alike. Teammates rank highest — above all a title or a big LAN won together, and recent ones most — then the same majors, years and organisations, nationality (nearby countries count partly), age and region.',
     ],
     rules: ['Guesses are unlimited.', 'A hint names a player halfway between your best guess and #1.'],
     sections: [
@@ -720,7 +719,7 @@ export const GAMES: GameMeta[] = [
         items: [
           'Easy 🟢 — 7 moments about famous names, far apart. Check as often as you like.',
           'Medium 🟡 — 8 moments, closer together. 2 lives.',
-          'Hard 🔴 — 10 moments, anyone. 1 life.',
+          'Hard 🔴 — 10 moments, anyone. 2 lives.',
         ],
       },
     ],
@@ -793,7 +792,7 @@ export const GAMES: GameMeta[] = [
     tagline: 'The leaderboard fills from the bottom up. Name the tournament.',
     icon: '🏟️',
     intro: [
-      'A tournament’s top 20 is revealed from 20th up, the winner last. Name the tournament.',
+      'A tournament’s leaderboard is revealed from the bottom up, the winner last. Name the tournament.',
       'A wrong guess reveals the next finisher and says whether the lobby was earlier or later, and whether the region was right.',
     ],
     rules: ['Pick the round, then the region.', 'On a duos or trios event a finisher is the whole team.'],

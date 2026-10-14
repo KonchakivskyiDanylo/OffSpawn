@@ -18,7 +18,9 @@ import type { Teammates } from '@/data/liquipedia/teammates';
 
 export type AttributeId =
   | 'teammates'
+  | 'lately'
   | 'titles'
+  | 'champions'
   | 'stage'
   | 'country'
   | 'age'
@@ -39,9 +41,11 @@ export interface Attribute {
 
 export const ATTRIBUTES: Attribute[] = [
   { id: 'teammates', label: 'Played together', hint: 'Tournaments entered as teammates, on a log scale: 40 or more is a full match.' },
+  { id: 'lately', label: 'Teamed up lately', hint: 'FNCS grand finals and major LANs played as teammates, each faded by the recency half-life: three this year is a full match.' },
   { id: 'titles', label: 'FNCS wins together', hint: 'Regional FNCS finals won on the same team: one scores 0.7, two or more a full match.' },
+  { id: 'champions', label: 'Won a big event together', hint: 'Won the World Cup, a Global Championship or another major LAN on the same team: 1 for each, times the event’s weight below.' },
   { id: 'stage', label: 'Big events together', hint: 'Teammates at the World Cup, a Global Championship or another major LAN: once scores 0.7; twice, or a podium, a full match.' },
-  { id: 'country', label: 'Country', hint: 'Same first nationality; a neighbouring scene (the Nordics, Benelux, the Baltics…) scores half.' },
+  { id: 'country', label: 'Country', hint: 'Same first nationality; a neighbouring scene (the Nordics, Benelux, the Baltics…) scores half; any other country up to 0.4, by how close its capital is (none past 2,500 km).' },
   { id: 'age', label: 'Age', hint: 'Birth dates two years apart score a third; unknown scores 0.3.' },
   { id: 'region', label: 'Region', hint: 'Same competitive region.' },
   { id: 'linked', label: 'Shared teammates', hint: 'Overlap between the two players’ top-50 teammate lists.' },
@@ -53,6 +57,35 @@ export const ATTRIBUTES: Attribute[] = [
 ];
 
 export type Weights = Record<AttributeId, number>;
+
+/** The big events by kind, each with its own weight in the two parts about them. */
+export type EventFamily = 'worldcup' | 'globals' | 'invitational' | 'summit' | 'other';
+
+export const EVENT_FAMILIES: { id: EventFamily; label: string }[] = [
+  { id: 'worldcup', label: 'World Cup' },
+  { id: 'globals', label: 'Global Championships' },
+  { id: 'invitational', label: '2022 Invitational' },
+  { id: 'summit', label: '2026 Summit' },
+  { id: 'other', label: 'Other major LANs' },
+];
+
+export type EventWeights = Record<EventFamily, number>;
+
+/**
+ * How much each big event counts in "won a big event together" and "big
+ * events together": 1 is as it stands, 2 twice that, 0 not at all (the user,
+ * 14 Oct 2026: "add weight for tournaments, so I can add extra weight to
+ * world cup or vice versa"). A lab knob for now, all level.
+ */
+export const DEFAULT_EVENT_WEIGHTS: EventWeights = { worldcup: 1, globals: 1, invitational: 1, summit: 1, other: 1 };
+
+export function eventFamily(name: string): EventFamily {
+  if (/World Cup/.test(name)) return 'worldcup';
+  if (/Global Championship/.test(name)) return 'globals';
+  if (/Invitational/.test(name)) return 'invitational';
+  if (/Summit/.test(name)) return 'summit';
+  return 'other';
+}
 
 /**
  * The user's own mix from the lab (14 Oct 2026: played together 5, country 2,
@@ -71,7 +104,9 @@ export type Weights = Record<AttributeId, number>;
  */
 export const DEFAULT_WEIGHTS: Weights = {
   teammates: 5,
+  lately: 3,
   titles: 4,
+  champions: 5,
   stage: 4,
   country: 2,
   age: 1.5,
@@ -95,6 +130,72 @@ export interface Context {
   facts: Facts | null;
   /** Who played which grand final and LAN, and with whom. */
   majors: Majors | null;
+  /** Each big event's weight; `DEFAULT_EVENT_WEIGHTS` when absent. */
+  events?: EventWeights;
+  /**
+   * Years for a result together to count half as much: titles, big events and
+   * "teamed up lately" fade with it. 0 is no fading. `DEFAULT_HALF_LIFE` when absent.
+   */
+  halfLife?: number;
+}
+
+/**
+ * Recency (the user, 14 Oct 2026: "recency bias to the teammates or wins"): a
+ * duo people remember is the one playing now, not the one from 2019. Played
+ * together counts tournaments with no dates (`teammates.json` keeps only the
+ * totals), so the dated results carry it: FNCS titles, the big events, and
+ * the finals and LANs in "teamed up lately".
+ *
+ * Measured over the Easy secrets against their partner at their latest final
+ * or LAN: with no fading it was one of the three closest 51% of the time; a
+ * four-year half-life and "teamed up lately" at 3 make it 57%, bring the top
+ * teammate from #3.1 to #2.9 on average, and leave every FNCS-winning partner
+ * in the top 25. Two years or a heavier "lately" pushed 2019's title partners
+ * out of it. Big events won together are weighted 5: each one's partner is
+ * then one of the secret's three closest (Aqua → Nyhrox and Cooper → Mero the
+ * closest); at 0 Cooper → Mero was #5.
+ */
+export const DEFAULT_HALF_LIFE = 4;
+
+const YEAR_MS = 365.25 * 86_400_000;
+
+/** How much a result on `date` still counts: 1 today, a half at one half-life ago. */
+function fader(context: Context): (date: string) => number {
+  const halfLife = context.halfLife ?? DEFAULT_HALF_LIFE;
+  if (!(halfLife > 0)) return () => 1;
+  // "Now" is the data's date, so a ranking is the same whenever it is made.
+  const now = Date.parse(context.facts?.generated ?? '') || Date.now();
+  return (date) => 0.5 ** (Math.max(0, now - Date.parse(date)) / YEAR_MS / halfLife);
+}
+
+/** A regional FNCS final won with the player, each faded by its age. */
+function titlesWith(playerId: string, context: Context): Map<string, number> {
+  const out = new Map<string, number>();
+  const facts = context.facts;
+  if (!facts) return out;
+  const fade = fader(context);
+  for (const index of facts.of(playerId).won) {
+    const event = facts.events[index];
+    if (!event || event.kind !== 'fncs' || event.lan) continue;
+    for (const id of facts.wonAt(index)) if (id !== playerId) out.set(id, (out.get(id) ?? 0) + fade(event.date));
+  }
+  return out;
+}
+
+/** How many finals or major LANs together make a full "teamed up lately". */
+const LATELY_FULL = 3;
+
+/** Every FNCS grand final and major LAN played as teammates, each faded by its age. */
+function latelyWith(playerId: string, context: Context): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!context.majors) return out;
+  const fade = fader(context);
+  for (const result of context.majors.resultsFor(playerId)) {
+    const team = context.majors.finishers(result);
+    if (team.size > (TEAM_SIZE[result.tournament.mode ?? ''] ?? 1)) continue;
+    for (const id of team) if (id !== playerId) out.set(id, (out.get(id) ?? 0) + fade(result.tournament.date));
+  }
+  return out;
 }
 
 export type Parts = Record<AttributeId, number>;
@@ -129,11 +230,12 @@ function jaccard<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): number {
  * compatriots, so country said nothing about anyone else, Lithuanians and
  * Estonians included.
  *
- * There is no third, same-continent step on purpose: `region` is already that
- * — Liquipedia reads it off nationality (Mexico is North America, Turkey and
- * South Africa the Middle East), so a continent score would only count region
- * twice. Countries in no scene — France, Brazil, Japan, South Korea, Turkey,
- * Israel, Iran — are big enough or apart enough to stand alone.
+ * Outside a scene, the distance between capitals gives a little
+ * (`countryCloseness`): Germany and Poland, Paris and Brussels, Japan and South
+ * Korea are next door without sharing a scene (the user, 14 Oct 2026: "improve
+ * countries… it's still gives to neighbor only"). There is no same-continent
+ * step: `region` is already that. Countries in no scene — France, Brazil,
+ * Japan, South Korea, Turkey, Israel, Iran — count by distance alone.
  */
 const SCENES: readonly (readonly string[])[] = [
   ['GB', 'IE'], // UK & Ireland
@@ -164,12 +266,57 @@ const SCENE_OF = new Map(SCENES.flatMap((countries, scene) => countries.map((cod
 /** What a neighbouring scene scores; the same country is 1. */
 const SAME_SCENE = 0.5;
 
-/** 1 for the same country, `SAME_SCENE` for a neighbour in the same scene, else 0. */
+/**
+ * Each country's capital, roughly, for how far apart two countries are — every
+ * country on the roster. A country missing here counts by its scene alone.
+ */
+const CAPITAL: Record<string, readonly [number, number]> = {
+  AE: [24.5, 54.4], AL: [41.3, 19.8], AR: [-34.6, -58.4], AT: [48.2, 16.4], AU: [-35.3, 149.1], AZ: [40.4, 49.9],
+  BA: [43.9, 18.4], BE: [50.9, 4.4], BG: [42.7, 23.3], BH: [26.2, 50.6], BO: [-16.5, -68.2], BR: [-15.8, -47.9],
+  BY: [53.9, 27.6], CA: [45.4, -75.7], CH: [47.0, 7.4], CL: [-33.5, -70.7], CN: [39.9, 116.4], CO: [4.7, -74.1],
+  CR: [9.9, -84.1], CU: [23.1, -82.4], CZ: [50.1, 14.4], DE: [52.5, 13.4], DK: [55.7, 12.6], DO: [18.5, -69.9],
+  DZ: [36.8, 3.1], EC: [-0.2, -78.5], EE: [59.4, 24.8], EG: [30.0, 31.2], ES: [40.4, -3.7], FI: [60.2, 24.9],
+  FJ: [-18.1, 178.4], FR: [48.9, 2.4], GB: [51.5, -0.1], GL: [64.2, -51.7], GR: [38.0, 23.7], GT: [14.6, -90.5],
+  HK: [22.3, 114.2], HN: [14.1, -87.2], HR: [45.8, 16.0], HU: [47.5, 19.0], ID: [-6.2, 106.8], IE: [53.3, -6.3],
+  IL: [31.8, 35.2], IN: [28.6, 77.2], IQ: [33.3, 44.4], IR: [35.7, 51.4], IS: [64.1, -21.9], IT: [41.9, 12.5],
+  JO: [32.0, 35.9], JP: [35.7, 139.7], KH: [11.6, 104.9], KR: [37.6, 127.0], KW: [29.4, 48.0], KZ: [51.2, 71.4],
+  LB: [33.9, 35.5], LT: [54.7, 25.3], LU: [49.6, 6.1], LV: [57.0, 24.1], MA: [34.0, -6.8], MD: [47.0, 28.9],
+  MK: [42.0, 21.4], MT: [35.9, 14.5], MX: [19.4, -99.1], MY: [3.1, 101.7], NA: [-22.6, 17.1], NI: [12.1, -86.3],
+  NL: [52.4, 4.9], NO: [59.9, 10.8], NZ: [-41.3, 174.8], OM: [23.6, 58.4], PA: [9.0, -79.5], PE: [-12.0, -77.0],
+  PH: [14.6, 121.0], PK: [33.7, 73.1], PL: [52.2, 21.0], PR: [18.5, -66.1], PS: [31.9, 35.2], PT: [38.7, -9.1],
+  PY: [-25.3, -57.6], QA: [25.3, 51.5], RO: [44.4, 26.1], RS: [44.8, 20.5], RU: [55.8, 37.6], SA: [24.7, 46.7],
+  SE: [59.3, 18.1], SG: [1.4, 103.8], SI: [46.1, 14.5], SK: [48.1, 17.1], SV: [13.7, -89.2], SY: [33.5, 36.3],
+  TH: [13.8, 100.5], TR: [39.9, 32.9], TT: [10.7, -61.5], UA: [50.5, 30.5], UG: [0.3, 32.6], US: [38.9, -77.0],
+  UY: [-34.9, -56.2], VE: [10.5, -66.9], VN: [21.0, 105.8], YE: [15.4, 44.2], ZA: [-25.7, 28.2],
+};
+
+/** The most a country outside the scene scores, next door; nothing from this far. */
+const NEAR = 0.4;
+const FAR_KM = 2500;
+
+/** Great-circle distance between two capitals, in km. */
+function km([lat1, lon1]: readonly [number, number], [lat2, lon2]: readonly [number, number]): number {
+  const rad = Math.PI / 180;
+  const h =
+    Math.sin(((lat2 - lat1) * rad) / 2) ** 2 +
+    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(((lon2 - lon1) * rad) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * 1 for the same country; `SAME_SCENE` for a neighbour in the same scene; and
+ * for any other country up to `NEAR`, falling to nothing at `FAR_KM` between
+ * capitals — Berlin and Warsaw, 520 km apart, score 0.32; Paris and Madrid
+ * 0.23; Lisbon and Moscow nothing. The better of the two counts.
+ */
 export function countryCloseness(a: string | null, b: string | null): number {
   if (a === null || b === null) return 0;
   if (a === b) return 1;
   const scene = SCENE_OF.get(a);
-  return scene !== undefined && scene === SCENE_OF.get(b) ? SAME_SCENE : 0;
+  const sameScene = scene !== undefined && scene === SCENE_OF.get(b) ? SAME_SCENE : 0;
+  const [p, q] = [CAPITAL[a], CAPITAL[b]];
+  const near = p && q ? NEAR * Math.max(0, 1 - km(p, q) / FAR_KM) : 0;
+  return Math.max(sameScene, near);
 }
 
 // -------------------------------------------------------- events together --
@@ -193,23 +340,37 @@ const TEAM_SIZE: Record<string, number> = { Duo: 2, Trio: 3, Squad: 4 };
  * only LAN together. Counted once, Nyhrox was #4 for Aqua, behind two of
  * Aqua's FNCS-title partners; twice, #3, and nothing else measured moved.
  */
-function stageMates(playerId: string, context: Context): Map<string, number> {
-  const out = new Map<string, number>();
-  if (!context.facts || !context.majors) return out;
+function stageMates(playerId: string, context: Context): { mates: Map<string, number>; won: Map<string, number> } {
+  const mates = new Map<string, number>();
+  // Big events won on the same team, each counted at its event's weight —
+  // Aqua and Nyhrox's World Cup, Cooper and Mero's 2023 Globals (the user,
+  // 14 Oct 2026: "what about like world cup win, or globals win").
+  const won = new Map<string, number>();
+  if (!context.facts || !context.majors) return { mates, won };
+  const weights = context.events ?? DEFAULT_EVENT_WEIGHTS;
+  const fade = fader(context);
   const big = new Set(context.facts.headlineEvents.map((event) => event.name));
   for (const result of context.majors.resultsFor(playerId)) {
     if (!big.has(result.tournament.name)) continue;
     const team = context.majors.finishers(result);
     if (team.size > (TEAM_SIZE[result.tournament.mode ?? ''] ?? 1)) continue;
-    const times = result.placement <= 3 ? 2 : 1;
-    for (const id of team) if (id !== playerId) out.set(id, (out.get(id) ?? 0) + times);
+    const weight = weights[eventFamily(result.tournament.name)] * fade(result.tournament.date);
+    const times = (result.placement <= 3 ? 2 : 1) * weight;
+    for (const id of team) {
+      if (id === playerId) continue;
+      mates.set(id, (mates.get(id) ?? 0) + times);
+      if (result.placement === 1) won.set(id, (won.get(id) ?? 0) + weight);
+    }
   }
-  return out;
+  return { mates, won };
 }
 
-/** Once together is already a strong clue; twice is as strong as it gets. */
+/**
+ * Once together is already a strong clue; twice is as strong as it gets. In
+ * between — an event weighted below 1 — it climbs to 0.7 in a straight line.
+ */
 function onceOrTwice(times: number): number {
-  return times >= 2 ? 1 : times === 1 ? 0.7 : 0;
+  return times >= 2 ? 1 : times >= 1 ? 0.7 + 0.3 * (times - 1) : 0.7 * times;
 }
 
 /**
@@ -238,7 +399,8 @@ function profile(player: RosterPlayer, context: Context, orgsOf: (id: string) =>
     born: player.birthDate ? Date.parse(player.birthDate) : NaN,
     mates: new Map(context.teammates.matesOf(player.id)),
     mateIds: new Set(context.teammates.matesOf(player.id).map(([id]) => id)),
-    titles: context.facts?.fncsTitlesWith(player.id) ?? new Map<string, number>(),
+    titles: titlesWith(player.id, context),
+    lately: latelyWith(player.id, context),
     stage: stageMates(player.id, context),
     years: new Set(Object.keys(player.earningsByYear)),
     events,
@@ -312,8 +474,10 @@ function compare(
   const sharedEvents = theirEvents.filter((result) => target.events.has(result.tournament.name)).length;
   return {
     teammates: Math.min(1, Math.log1p(together) / Math.log1p(40)),
+    lately: Math.min(1, (target.lately.get(player.id) ?? 0) / LATELY_FULL),
     titles: onceOrTwice(target.titles.get(player.id) ?? 0),
-    stage: onceOrTwice(target.stage.get(player.id) ?? 0),
+    champions: target.stage.won.get(player.id) ?? 0,
+    stage: onceOrTwice(target.stage.mates.get(player.id) ?? 0),
     country: countryCloseness(target.player.country, player.country),
     age,
     region: player.region !== null && player.region === target.player.region ? 1 : 0,

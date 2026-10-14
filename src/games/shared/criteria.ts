@@ -3,7 +3,7 @@ import type { Orgs } from '@/data/liquipedia/orgs';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { countShort, PLATFORM_META, type Socials } from '@/data/socials';
 import { moneyShort } from '@/lib/format';
-import { ambiguousNames, namedPlayer } from '@/lib/text';
+import { namedPlayer, namesakesOf } from '@/lib/text';
 
 /**
  * Reusable player predicates.
@@ -257,12 +257,12 @@ export function buildCriteria(
    * never about someone you would have to look up. This used to be the eight
    * biggest earners only, which put the same eight names on every board.
    */
-  const ambiguous = ambiguousNames(everyone ?? players);
+  const namesakes = namesakesOf(everyone ?? players);
   for (const anchor of players) {
     if (anchor.tier !== 'easy') continue;
     const partners = facts.fncsPartners(anchor.id);
     if (partners.size < MIN_PARTNERS) continue;
-    const name = namedPlayer(anchor, ambiguous);
+    const name = namedPlayer(anchor, namesakes);
     add(
       `fncs-with:${anchor.id}`,
       'fncs-with',

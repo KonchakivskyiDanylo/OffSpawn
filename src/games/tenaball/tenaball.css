@@ -182,7 +182,10 @@
   }
 }
 
-/* "As of 13 Oct 2026" on a pinned daily board: the numbers' date, not a rule. */
+/* "(as of 13 Oct 2026)" beside the title: the numbers' date, quieter than the name. */
 .tb-head__asof {
   white-space: nowrap;
+  font-size: 0.8em;
+  font-weight: 500;
+  color: var(--text-muted);
 }

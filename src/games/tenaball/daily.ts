@@ -7,6 +7,9 @@ import { answerSig, resting, spaced } from '@/daily/reuse';
 import type { Socials } from '@/data/socials';
 import { DAILY_SOCIAL, SOCIAL_GROUP, socialBoards } from './social-boards';
 import { globalsBoards } from './globals-boards';
+import { recordBoards } from './record-boards';
+import { winnerBoards } from './winner-boards';
+import type { Facts } from '@/data/liquipedia/facts';
 import type { DailyContext, DailyPuzzles, DailyResult } from '@/daily/types';
 import { pick } from '@/lib/rng';
 import { createGame, DAILY_LIVES, HARD_LIVES, namedIn, slotsIn, type Difficulty, type GameState } from './engine';
@@ -26,7 +29,7 @@ type Puzzle = DailyPuzzles['tenaball'];
  * tournament exactly is a spelling test).
  */
 const KINDS: { kind: string; groups: RegExp }[] = [
-  { kind: 'players', groups: /^Players$/ },
+  { kind: 'players', groups: /^(Players|By birth year)$/ },
   { kind: 'seasons', groups: /^\d{4} season$/ },
   { kind: 'fncs', groups: /^FNCS all time$/ },
   { kind: 'places', groups: /^By (region|country)$/ },
@@ -36,6 +39,8 @@ const KINDS: { kind: string; groups: RegExp }[] = [
   { kind: 'divcups', groups: /^Div Cups — all time$/ },
   // The Globals across the years, built from the majors (`globals-boards.ts`).
   { kind: 'globals', groups: /^Global Championships$/ },
+  // Who won the FNCS and the Div Cups, and when (`winner-boards.ts`, 14 Oct 2026).
+  { kind: 'winners', groups: /^(FNCS|Div Cup) winners$/ },
   // Twitch and YouTube, built from the day's counts (`social-boards.ts`).
   { kind: 'followers', groups: /^Followers$/ },
 ];
@@ -89,11 +94,24 @@ function famousEnough(board: Board, known: ReadonlySet<string>): boolean {
 }
 
 /**
- * Every board a daily can name: the shipped set, the Globals boards, and the
- * follower boards while there are counts. The schedule editor reads the same list.
+ * Every board a daily can name: the shipped set, the Globals boards, the FNCS
+ * and Div Cup winners boards, the records (`record-boards.ts`), and the
+ * follower boards while there are counts.
+ * The schedule editor reads the same list.
  */
-export function dailyBoards(rankings: Rankings, roster: Roster, socials: Socials | null, majors: Majors | null): Board[] {
-  return [...rankings.boards, ...(majors ? globalsBoards(majors, roster) : []), ...socialBoards(roster, socials)];
+export function dailyBoards(
+  rankings: Rankings,
+  roster: Roster,
+  socials: Socials | null,
+  majors: Majors | null,
+  facts: Facts | null = null,
+): Board[] {
+  return [
+    ...rankings.boards,
+    ...(majors ? globalsBoards(majors, roster) : []),
+    ...(facts ? [...winnerBoards(facts, roster), ...recordBoards(facts, roster)] : []),
+    ...socialBoards(roster, socials),
+  ];
 }
 
 export function pickDaily(
@@ -102,9 +120,10 @@ export function pickDaily(
   socials: Socials | null,
   majors: Majors | null,
   ctx: DailyContext,
+  facts: Facts | null = null,
 ): Puzzle | null {
   const known = knownPlayers(roster);
-  const all = dailyBoards(rankings, roster, socials, majors);
+  const all = dailyBoards(rankings, roster, socials, majors, facts);
   const byId = new Map(all.map((board) => [board.id, board]));
   // A follower board is famous by what it ranks, so it skips the fame test — but
   // only the big ones: the world, Europe, North America, the FNCS champions.
@@ -148,9 +167,10 @@ export function freezeDaily(
   socials: Socials | null,
   majors: Majors | null,
   today: string,
+  facts: Facts | null = null,
 ): Puzzle | null {
   if (puzzle.frozen) return null;
-  const board = dailyBoards(rankings, roster, socials, majors).find((candidate) => candidate.id === puzzle.board);
+  const board = dailyBoards(rankings, roster, socials, majors, facts).find((candidate) => candidate.id === puzzle.board);
   if (!board) return null;
   const asOf = board.id.startsWith('tournament:') ? undefined : board.group === SOCIAL_GROUP ? today : rankings.generated;
   return { ...puzzle, sig: boardSig(board), frozen: asOf ? { ...board, asOf } : board };
@@ -174,11 +194,12 @@ export function restoreDaily(
   socials: Socials | null,
   majors: Majors | null,
   saved: Snapshot | null,
+  facts: Facts | null = null,
 ): GameState | null {
   // A day pinned on its date plays its own board; one not pinned yet (a dev
   // server, or a day made before 14 Oct 2026 and not served since) today's.
   const board =
-    puzzle.frozen ?? dailyBoards(rankings, roster, socials, majors).find((candidate) => candidate.id === puzzle.board);
+    puzzle.frozen ?? dailyBoards(rankings, roster, socials, majors, facts).find((candidate) => candidate.id === puzzle.board);
   if (!board) return null;
   const fresh = createGame(board, DAILY_LEVEL, DAILY_LIVES);
   if (!saved) return fresh;

@@ -24,7 +24,10 @@ import { plural } from '@/lib/format';
 import {
   ATTRIBUTES,
   createGame,
+  DEFAULT_EVENT_WEIGHTS,
+  DEFAULT_HALF_LIFE,
   DEFAULT_WEIGHTS,
+  EVENT_FAMILIES,
   eligible,
   giveUp,
   hintFor,
@@ -32,6 +35,7 @@ import {
   record as roundRecord,
   submitGuess,
   type AttributeId,
+  type EventWeights,
   type GameState,
   type Scored,
   type Weights,
@@ -97,13 +101,15 @@ function Game({
   const [game, setGame] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [weights, setWeights] = useState<Weights>(DEFAULT_WEIGHTS);
+  const [events, setEvents] = useState<EventWeights>(DEFAULT_EVENT_WEIGHTS);
+  const [halfLife, setHalfLife] = useState(DEFAULT_HALF_LIFE);
   const [display, setDisplay] = useState<'rank' | 'score'>('rank');
   const [showParts, setShowParts] = useState(false);
   const [peek, setPeek] = useState(false);
 
   const ranking = useMemo(
-    () => (game ? rankAll(game.secret, roster.players, weights, { teammates, orgs, facts, majors }) : null),
-    [game?.secret, roster, weights, teammates, orgs, facts, majors],
+    () => (game ? rankAll(game.secret, roster.players, weights, { teammates, orgs, facts, majors, events, halfLife }) : null),
+    [game?.secret, roster, weights, events, halfLife, teammates, orgs, facts, majors],
   );
 
   useRoundRecorder('contextinho', game !== null && game.status !== 'playing', () => ({
@@ -250,6 +256,10 @@ function Game({
           <Lab
             weights={weights}
             onWeights={setWeights}
+            events={events}
+            onEvents={setEvents}
+            halfLife={halfLife}
+            onHalfLife={setHalfLife}
             display={display}
             onDisplay={setDisplay}
             showParts={showParts}
@@ -315,6 +325,10 @@ function Parts({ entry }: { entry: Scored }) {
 function Lab({
   weights,
   onWeights,
+  events,
+  onEvents,
+  halfLife,
+  onHalfLife,
   display,
   onDisplay,
   showParts,
@@ -324,6 +338,10 @@ function Lab({
 }: {
   weights: Weights;
   onWeights: (next: Weights) => void;
+  events: EventWeights;
+  onEvents: (next: EventWeights) => void;
+  halfLife: number;
+  onHalfLife: (next: number) => void;
   display: 'rank' | 'score';
   onDisplay: (next: 'rank' | 'score') => void;
   showParts: boolean;
@@ -359,6 +377,35 @@ function Lab({
             </label>
           ))}
         </div>
+        <label className="cx-weight">
+          <span className="cx-weight__label">
+            Recency half-life <strong>{halfLife > 0 ? `${halfLife} years` : 'off'}</strong>
+          </span>
+          <input type="range" min={0} max={10} step={0.5} value={halfLife} onChange={(event) => onHalfLife(Number(event.target.value))} />
+          <span className="tiny faint">
+            How fast titles, big events and “teamed up lately” fade: a result this many years old counts half. 0 is no fading.
+          </span>
+        </label>
+        <p className="tiny faint" style={{ margin: 0 }}>
+          Big events, each weighted inside the two parts about them: 1 as it stands, 2 twice that, 0 left out.
+        </p>
+        <div className="cx-weights">
+          {EVENT_FAMILIES.map((family) => (
+            <label key={family.id} className="cx-weight">
+              <span className="cx-weight__label">
+                {family.label} <strong>{events[family.id]}</strong>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={3}
+                step={0.5}
+                value={events[family.id]}
+                onChange={(event) => onEvents({ ...events, [family.id]: Number(event.target.value) })}
+              />
+            </label>
+          ))}
+        </div>
         <div className="row">
           <div className="difficulty-switch">
             <button type="button" className="difficulty-switch__btn" aria-pressed={display === 'rank'} onClick={() => onDisplay('rank')}>
@@ -374,7 +421,15 @@ function Lab({
           <label className="small row" style={{ gap: 6 }}>
             <input type="checkbox" checked={peek} onChange={(event) => onPeek(event.target.checked)} /> Peek at the ten closest
           </label>
-          <button type="button" className="link-btn small" onClick={() => onWeights(DEFAULT_WEIGHTS)}>
+          <button
+            type="button"
+            className="link-btn small"
+            onClick={() => {
+              onWeights(DEFAULT_WEIGHTS);
+              onEvents(DEFAULT_EVENT_WEIGHTS);
+              onHalfLife(DEFAULT_HALF_LIFE);
+            }}
+          >
             Reset to the defaults
           </button>
         </div>

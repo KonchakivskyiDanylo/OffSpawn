@@ -68,7 +68,7 @@ function lookup(data: DailyData) {
     const socials = data.socials ?? null;
     found = {
       byId: new Map(roster.players.map((player) => [player.id, player])),
-      boards: new Map(dailyBoards(rankings, roster, socials, majors).map((board) => [board.id, board])),
+      boards: new Map(dailyBoards(rankings, roster, socials, majors, facts).map((board) => [board.id, board])),
       lists: new Map(buildCriteria(roster, facts, null, orgs, teammates, socials).map((list) => [list.id, list])),
       rules: new Map(
         boardRules({ facts, orgs, socials }, dailyPools(roster, facts), 'medium').map((rule) => [rule.id, rule.short]),

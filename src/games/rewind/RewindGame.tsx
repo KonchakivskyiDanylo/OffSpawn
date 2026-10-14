@@ -41,7 +41,7 @@ const meta = getGame('rewind')!;
 const DIFFICULTIES: LevelOption<Level>[] = [
   { id: 'easy', label: LEVEL_LABEL.easy, hint: `${LEVELS.easy.size} moments about famous names, far apart. Check as often as you like.` },
   { id: 'medium', label: LEVEL_LABEL.medium, hint: `${LEVELS.medium.size} moments, closer together. ${LEVELS.medium.lives} lives.` },
-  { id: 'hard', label: LEVEL_LABEL.hard, hint: `${LEVELS.hard.size} moments, anyone. One check.` },
+  { id: 'hard', label: LEVEL_LABEL.hard, hint: `${LEVELS.hard.size} moments, anyone. ${LEVELS.hard.lives} lives.` },
 ];
 
 export default function RewindGame() {

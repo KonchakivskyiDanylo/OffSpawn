@@ -278,20 +278,17 @@ try {
   const later = (await request(`/api/admin/liquipedia?after=${pings?.[0]?.id}`, {}, cookie)).body as unknown[];
   check(later?.length === 1, `the cursor did not skip what was already read (${later?.length})`);
 
-  // /analytics/data: the data's dates, the pings since the export (both of
-  // today's), and an Update button that says it is not set up rather than failing.
+  // /analytics/data: the data's dates and the pings since the export (both of today's).
   check((await request('/api/admin/data')).status === 401, 'the data status answered without a login');
   const status = (await request('/api/admin/data', {}, cookie)).body as {
     dates: { date: string | null }[];
     webhook: boolean;
     changes: { total: number; pages: number };
-    updater: { configured: boolean };
   };
   check(
-    Boolean(status?.dates?.[0]?.date) && status.webhook && status.changes.total === 2 && status.updater.configured === false,
+    Boolean(status?.dates?.[0]?.date) && status.webhook && status.changes.total === 2,
     `the data status reads ${JSON.stringify(status)}`,
   );
-  check((await post('/api/admin/data/update', {}, cookie)).status === 502, 'Update now did not refuse without its settings');
 
   // ---- limits: the support form is capped at five per ten minutes per client
   let limited = false;

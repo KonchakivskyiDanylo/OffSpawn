@@ -53,7 +53,7 @@ Every game reads one Liquipedia export in `liquipedia_data/clean_data/fortnite/`
 | `career_path.json` | 187 majors and every player's finishes in them: 1,175 with five or more, 3,348 in all once cell 7 has run | cell 7 | Career Path, Tenite's Globals boards, Rewind's duos |
 | `teammates.json` | each player's 50 most frequent teammates | cell 6 | Who Are Ya, List |
 | `orgs.json` | 979 organisations, with current and past players | the export | Griefer, Tic Tac Toe, Connections, Tenite, List |
-| `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, which headline events they played; plus `season`, every team's finish at the year's big events | notebook appendix | the criteria games, List, Tenite's field boards, FNCS Finals, the glossary |
+| `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, which headline events they played; plus `season`, every team's finish at the year's big events, and `divcups`, every Div Cup final won with its day | notebook appendix | the criteria games, List, Tenite's field and winners boards, FNCS Finals, Contextinho, the glossary |
 | `rankings.json` | 375 precomputed Tenite boards (284 until cells 2–4 are re-run), plus the tournament names the paydays boards answer from | cells 2–4 | Tenite |
 | `pools.json` | event fields; today one, the FNCS 2026 Globals with 103 players, where each finished and what each had earned before it | cell 5 | event mode |
 | `bios.json` | real names and every organisation stint with its dates, from the transfers | `enrich.py` | IRL, Org Chart, Transfer Window, Rewind (they fall back to `players.json` and `orgs.json` without it) |
@@ -138,7 +138,7 @@ On the home page you can swap the whole scene for one tournament's field; today 
 - **Where from:** country and region
 - **Who for:** has played for one of the ten richest organisations
 - **What won:** FNCS winner, 2+ or 3+ FNCS wins, Global, major LAN or major winner, won a region's FNCS, won an FNCS in a given year
-- **Box Fight only (also Bingo's squares)** (their own kinds, so Connections' and Griefer's whitelists leave them out). Added 14 Oct 2026, the user's picks from a measured list: won a Solo / Duo / Trio / Squad FNCS, won FNCS in 3+ different years, won an FNCS before turning 15 or 16 (age on the day of the final), played the 2019 World Cup (moved here from Bingo), played 3+ Globals. **Deep rules**, built only for Hard boards (`deep` in `CriteriaOptions`; the user: "categories like won a div cup isn't easy, so they could be only in hard"): played 2+ Globals, won a Div Cup (any region and each region), 5+ Div Cup wins, 40+ Performance Evaluations, $100K+ in 2025, $50K+ in 2026, $500K+ in one year, played every FNCS final of 2025 in their region. Left out at the user's word: 40+ Div Cup finals, an FNCS podium but no win, 10+ finals but no win, top 10 at a Globals. Over 60 boards a level, a new rule is on 55 Easy, 44 Medium and 53 Hard boards; the World Cup is on half the Easy ones. Earlier: the exact FNCS count (none, exactly 1, 2 or 3, 4+), won the FNCS back to back, top 3 at a major LAN (35 players), and won an FNCS with a named player — any Easy-tier player with 3+ FNCS-winning partners can be named (23 of them; Peterbot: Cold, Ritual, Pollo, Bylah). A handle more than one player has is named with the country, "Chap (Poland)" (`namedPlayer` in `lib/text.ts`; the user, 14 Oct 2026: "there are a lot of CHAPS, so it should be specified which exactly")
+- **Box Fight only (also Bingo's squares)** (their own kinds, so Connections' and Griefer's whitelists leave them out). Added 14 Oct 2026, the user's picks from a measured list: won a Solo / Duo / Trio / Squad FNCS, won FNCS in 3+ different years, won an FNCS before turning 15 or 16 (age on the day of the final), played the 2019 World Cup (moved here from Bingo), played 3+ Globals. **Deep rules**, built only for Hard boards (`deep` in `CriteriaOptions`; the user: "categories like won a div cup isn't easy, so they could be only in hard"): played 2+ Globals, won a Div Cup (any region and each region), 5+ Div Cup wins, 40+ Performance Evaluations, $100K+ in 2025, $50K+ in 2026, $500K+ in one year, played every FNCS final of 2025 in their region. Left out at the user's word: 40+ Div Cup finals, an FNCS podium but no win, 10+ finals but no win, top 10 at a Globals. Over 60 boards a level, a new rule is on 55 Easy, 44 Medium and 53 Hard boards; the World Cup is on half the Easy ones. Earlier: the exact FNCS count (none, exactly 1, 2 or 3, 4+), won the FNCS back to back, top 3 at a major LAN (35 players), and won an FNCS with a named player — any Easy-tier player with 3+ FNCS-winning partners can be named (23 of them; Peterbot: Cold, Ritual, Pollo, Bylah). A handle more than one player has is named with the country, "Cold (United States)" (`namedPlayer` in `lib/text.ts`; the user, 14 Oct 2026: "there are a lot of CHAPS, so it should be specified which exactly"). When a namesake shares the country too — 32 handles do, Cooper and Deyy among the famous — the career earnings follow, "Cooper (United States, $1.2M)"; level on that as well, the page name
 - **What earned:** $100K, $250K, $500K or $1M+ career earnings
 - **Where played:** at a named Globals or major LAN
 - **The rest:** age (under 18, 20+). There is no active or retired rule: Liquipedia rarely marks a player retired, so "Retired" refused players everyone knows have stopped (removed 28 Sep 2026)
@@ -338,6 +338,12 @@ You get one top-10 board and ten empty slots, and name the ten. A correct answer
 | FNCS finals — other regions | 21 | the other regions' 2025 and 2026 finals and the 2021 Grand Royale |
 | Tournaments | 8 | a major LAN's top ten placements |
 | Global Championships | 5 | the Globals across the years (`globals-boards.ts`, built in the browser): the best average finish at every Globals, a missed one at twice a full lobby's last place like the season boards; the best average over the Globals played, one board per minimum from one Globals to all of them (the user: "min4, min3, min2, min1 all of them") — but a board with the same ten as one already made is left out, and today "played all four" is the best board row for row; the worst average among the players at all of them (24 today: EpikWhale, Shadow, Yuma…), or at all but one once fewer than 20 have been to every one. Level averages go to career earnings: "two or more played" has Vanyak3kk, Demus and Darm on 7.5 for 10th |
+| FNCS winners | 26 | built in the browser from `facts.json` (`winner-boards.ts`, 14 Oct 2026, the user's list): per FNCS region, North America split NA East / NA West / NA Central — the most wins (7 regions), the first and last 10 different players to win (8 and 7), the first and last 10 countries to win (EU and the Middle East; the others have fewer than eleven countries). "Last" is each player's latest win, "first" their first; teammates on one day are split by career earnings. A walk that meets a win whose team is not all on the roster before the eleventh name stops, and there is no board (Oceania's last 10, for one) |
+| Div Cup winners | 48 | from `divcups` in `facts.json` (every Div Cup final won, with its day; written by `derived.py` since 14 Oct 2026): the first and last 10 players to win one in each region, all time and per year; and "All 10 players to win an EU Div Cup in C7S1" — any season, year or region whose winners are exactly ten, no more, no less ("if there is more or less than 10 then don't do it"). Those have no 11th. No FNCS group is exactly ten today |
+| Records | 27 | `record-boards.ts`, the user's picks of 14 Oct 2026: FNCS win rate, wins ÷ grand finals played — the world for players with 5+ finals ("for the world let's have 5"), each FNCS region with no minimum ("for region without it"), level rates to more wins; the fewest finals before a first win in each FNCS region (0 is winning on debut; level counts to whoever won first — a region-wide "first 10 to win on debut" cannot fill a board, no region has more than nine); first 10 to $1M in career earnings (the day the results' running total passed it — `million` in `facts.json`, from `derived.py`; the first eleven all did it at the 2019 World Cup), first 10 to 5 FNCS wins, the last 10 to win the FNCS in their first grand final (the first ten would only be Season X, everybody's first final; nobody has done it since May 2022), youngest and oldest FNCS winners (age on the day, published birthdays only), most finals before a first win, longest wait between two wins, most finals in a row (rounds already played), the pairs with the most major titles together (FNCS finals, Globals, major LANs; a trio is three pairs, so a player can be on several rows — the engine gives a name to a row still missing it), and countries by different FNCS winners |
+| By birth year | 22 | the top 10 earners born in each year, 1990 to 2011 |
+
+**Asked for on 14 Oct 2026 and not built**, because the data does not make a fair ten: first 10 to win in two FNCS regions (nine have: Acorn, Muz, Dukez, SwizzY, Veno, Peterbot, Cold, Boltz, Khanada), fewest finals before a first win (43 won their first), most Globals in a row (24 have played all four), every LAN champion as exactly ten (fifteen), anyone's ten FNCS partners (nobody has exactly ten), and List's "won the FNCS in two NA regions" (six players, under List's eight).
 
 Seven FNCS finals are left out by the rules below: a finisher the roster cannot name, a shared place in the top eleven, or a player listed twice.
 
@@ -562,9 +568,9 @@ Ten players and one category; sort them into a pyramid of 1, 2, 3 and 4, best at
 
 | Level | Who | Values | Checks |
 | --- | --- | --- | --- |
-| Easy | the Easy tier | start in the top quarter of the ranking; money and averages at least 12% apart | unlimited |
-| Medium | Easy + Medium tiers | top third; 6% apart | 2 lives |
-| Hard | everyone | top half; 3% apart | 1 life |
+| Easy | the Easy tier | start in the top quarter of the ranking; money at least 12% apart, birthdays 180 days | unlimited |
+| Medium | Easy + Medium tiers | top third; 6% apart, 90 days | 2 lives |
+| Hard | everyone | top half; 3% apart, 30 days | 1 life |
 
 **Categories.** A kind first, each equally likely, then a category inside it (`playerCategories` in the engine):
 
@@ -572,30 +578,20 @@ Ten players and one category; sort them into a pyramid of 1, 2, 3 and 4, best at
 | --- | --- | --- |
 | FNCS finals | FNCS grand finals played | most |
 | FNCS wins | FNCS wins | most |
-| FNCS finishes | FNCS podiums (top 3) or FNCS top 10s, in a regional final — the finals an FNCS win counts | most |
 | Earnings | career earnings | most |
 | Earnings in a year | one year, 2018 to now | most |
-| Age | in whole years; no birthday, not in it | youngest |
-| Globals | average finish at the Global Championships, for players with two or more | best average |
+| Age | by birth date, shown as the age to the month ("19y 4m"); no birthday, not in it | youngest |
 | Followers | Twitch or YouTube, while the server has fresh counts | most |
 | Tournament | ten finishers at one event | best finish |
 
 - **Tournaments:** the events of Tenite's tournament boards — the LANs on Easy, plus EU/NA finals since 2024 on Medium, every final on Hard; on a duos event each item is the team. The ten are drawn at random from the event's results in `career_path.json` (the user, 1 Oct 2026: not always the top ten): from the top 20 on Easy, the top 30 on Medium, anywhere on Hard, and only places whose whole team is on the roster. Without that file, the top ten.
-- **From `career_path.json`:** FNCS top 10s and the Globals average. The game loads it after the first paint; until it is there, they are not drawn.
 - **Hidden:** LAN appearances (the user, 14 Oct 2026: "remove category lan appearances for now"). Its code stays behind `hidden: true`; `check:games` fails if it is drawn, or if the flag goes.
-- **Close but orderable:** money, followers and the Globals average walk the ranking from the best end, taking the next player at least the level's gap from the last. Counts (age included) take one player per distinct value; FNCS wins has fewer than ten values, so up to three pairs share a value.
+- **Close but orderable:** money and followers walk the ranking from the best end, taking the next player at least the level's gap from the last; age does the same with birth dates, at least 180, 90 or 30 days apart (the user, 14 Oct 2026: "if the same age but months it's fine"). Counts take one player per distinct value; FNCS wins has fewer than ten values, so up to three pairs share a value.
 - **Ties:** players level on a value are right either way round.
 
-The categories added on 14 Oct 2026, measured on the export of 13 Oct (`check:games` builds every category 20 of 20 on every level):
-
-| Category | Easy: players, values | Medium | Hard | Built of 200, each level | Level pairs per pyramid, Easy / Medium / Hard |
-| --- | --- | --- | --- | --- | --- |
-| FNCS podiums | 92, 11 | 448, 12 | 569, 12 | 200 | 0 / 0.3 / 1.0 |
-| FNCS top 10s | 105, 18 | 712, 19 | 1,403, 19 | 200 | none |
-| Age | 108, 16 | 876, 26 | 3,037, 30 | 200 | none |
-| Globals average | 49, 41 | 107, 72 | 107, 72 | 200 | none (never level) |
-
 **Left out:**
+
+- FNCS podiums, FNCS top 10s and average Globals finish: added on 14 Oct 2026 and taken out the same day (the user: "Keep only age, don't want this other categories in there").
 
 - LAN wins: fifteen players have one, nearly all exactly one.
 - Majors played: the regional finals plus a handful of LANs, so the same order as FNCS grand finals played, give or take one.
@@ -618,10 +614,10 @@ Three modes (the user, 14 Oct 2026: "2 modes. One is which is now with amount of
 | Level | Dealt from | Deck | Clock | Every square has in the deck | Lives |
 | --- | --- | --- | --- | --- | --- |
 | Easy | the Easy tier | 40 | 2:00 | 3 players | 3 |
-| Medium | Easy + Medium | 35 | 1:30 | 2 | 3 |
-| Hard | everyone | 30 | 1:00 | 2 | 2 |
+| Medium | Easy + Medium | 35 | 1:45 | 2 | 3 |
+| Hard | everyone | 30 | 1:30 | 2 | 2 |
 
-- **Sizes and clocks:** the user, 14 Oct 2026: "Decrease players, so have like 40-35-30" (they were 50, 45, 40) and "60-90-120" seconds, read as the easier level getting the longer clock — Hard's unknown names come with the least time.
+- **Sizes and clocks:** the user, 14 Oct 2026: "Decrease players, so have like 40-35-30" (they were 50, 45, 40) and "60-90-120" seconds, read as the easier level getting the longer clock. Raised the same day to 2:00 / 1:45 / 1:30: a perfect player needs about 21, 34 and 39 players, so 1:00 left Hard 1.5 seconds a player; now the pace is about 5.7, 3.1 and 2.3 seconds.
 - **The deck:** players until every square is covered that many times, then anyone from the band — some fit nothing and are there to be skipped (about 1.4 per Easy deck, 5 on Medium, 4 on Hard). It is kept only if a full card is possible and stays possible with any one player removed, so no single player is the only way to a square. The covering alone takes 19–28 players, so even Hard's 30 has room: 25 of 25 seeds build on every level, guarantees unchanged.
 - **The stream (Timed, Endless):** each player is drawn from the level's band, never the one just shown. Anyone else can come back, and go on another square they fit — on Hard a square may have only two answers in the band, so ruling out players already on the card could leave it impossible. The draw leans towards the open squares (the user: "when there is 1 category left, the players who fit are much more likely to be there"): at least 0.75 / ∛open of the stream fits one, or the band's own share when that is higher. A fitting player is drawn square-first, an open square at random and then someone who fits it, so a square with three answers is fed as often as one with three hundred.
 
@@ -679,9 +675,11 @@ Every guess is ranked against the secret out of all 5,689 players, the secret #1
 | Part | Default weight | 1 means |
 | --- | --- | --- |
 | Played together | 5 | 40+ tournaments as teammates (log scale) |
-| FNCS wins together | 4 | two regional FNCS titles won on the same team; one scores 0.7 |
+| Teamed up lately | 3 | three FNCS finals or major LANs as teammates this year, each faded by the half-life |
+| FNCS wins together | 4 | two regional FNCS titles won on the same team, faded by the half-life; one scores 0.7 |
+| Won a big event together | 5 | 1 per World Cup, Globals or major LAN won on one team, times the event's weight and the fade |
 | Big events together | 4 | teammates at two major LANs, or on the podium of one; once scores 0.7 |
-| Country | 2 | same first nationality; a neighbour in the same scene 0.5 |
+| Country | 2 | same first nationality; a neighbour in the same scene 0.5; any other country up to 0.4 by the distance between capitals |
 | Age | 1.5 | same birthday; two years apart scores about a third; unknown 0.3 |
 | Region | 1 | same region |
 | Shared teammates | 1 | the two top-50 teammate lists overlap by a third |
@@ -693,7 +691,10 @@ Every guess is ranked against the secret out of all 5,689 players, the secret #1
 - **FNCS wins together** — "if they win together it should be a really big clue" — counts titles per partner from `facts.json` (`Facts.fncsTitlesWith`).
 - **Big events together** are the major LANs (`Facts.headlineEvents`: the World Cup, the Globals, the 2022 Invitational, the Summit, the Reload Elite final) — "if the players played together world cup it should give them a lot of points". A team is everyone who finished in one place (`Majors.finishers`); a place two teams tied for is skipped. A podium counts twice, so Aqua's World Cup partner Nyhrox is #3 for him rather than #4.
 - **Same tournaments** is lobbies rather than years ("some eu player plays fncs and I name another player from eu, they could have played in the same lobby a lot"): the regional grand finals and LANs of `career_path.json`. Dividing by the shorter career lets a short one score fully if it was all spent in the secret's finals; the floor of 10 keeps one shared final out of one at 0.1. 10 measured better than 5 or 15.
-- **Country** is no longer all-or-nothing ("in eu, especially in countries with a small amount of players there could be a problem"). The scenes, hand-made in the engine: UK & Ireland, the Nordics, DACH, Benelux, Iberia, Italy & Malta, the Baltics, Central Europe (Poland, Czechia, Slovakia, Hungary), the Balkans (with Greece, Romania, Bulgaria), Eastern Europe & CIS, US & Canada, Spanish-speaking America & the Caribbean, the Gulf, the Levant, Iraq & North Africa, Oceania, Greater China, Southeast Asia, South Asia, Sub-Saharan Africa. France, Brazil, Japan, South Korea, Turkey, Israel and Iran stand alone. There is no same-continent step: `region` is read off nationality, so it already is one.
+- **Won a big event together** (the user, 14 Oct 2026: "what about like world cup win, or globals win"): every partner it gives is one of the secret's three closest — Aqua → Nyhrox and Cooper → Mero the closest of all (#5 for Mero at weight 0).
+- **Event weights** (lab only, all 1 by default): World Cup, Globals, 2022 Invitational, 2026 Summit, other major LANs, each multiplying its events in the two big-event parts ("add weight for tournaments, so I can add extra weight to world cup or vice versa"; `EVENT_FAMILIES`).
+- **Recency** ("recency bias to the teammates or wins"): titles, big events and "teamed up lately" fade with a half-life, 4 years by default (`DEFAULT_HALF_LIFE`, a lab slider; "now" is the data's date). Played together cannot fade: `teammates.json` keeps only totals. Against each Easy secret's partner at their latest final or LAN: one of the three closest 51% of the time before, 57% now; the top teammate #3.1 → #2.9; every FNCS partner still in the top 25. Two years, or "lately" heavier, pushed 2019's title partners out.
+- **Country** is no longer all-or-nothing ("in eu, especially in countries with a small amount of players there could be a problem"). The scenes, hand-made in the engine: UK & Ireland, the Nordics, DACH, Benelux, Iberia, Italy & Malta, the Baltics, Central Europe (Poland, Czechia, Slovakia, Hungary), the Balkans (with Greece, Romania, Bulgaria), Eastern Europe & CIS, US & Canada, Spanish-speaking America & the Caribbean, the Gulf, the Levant, Iraq & North Africa, Oceania, Greater China, Southeast Asia, South Asia, Sub-Saharan Africa. France, Brazil, Japan, South Korea, Turkey, Israel and Iran count by distance alone. Outside a scene, the distance between capitals gives up to 0.4, nothing past 2,500 km (14 Oct 2026, the user: "it's still gives to neighbor only"): Berlin–Warsaw 0.32, Paris–Madrid 0.23, Lisbon–Moscow 0 (`CAPITAL` in the engine, every roster country). There is no same-continent step: `region` is read off nationality, so it already is one.
 
 Measured over all 109 Easy secrets:
 
@@ -706,7 +707,7 @@ Measured over all 109 Easy secrets:
 | A neighbour of a small-country secret (median) | #879 | #1015 | #295 |
 | A random same-region stranger in the top 25 | 1% | 0% | 0% |
 
-`check:games` holds every Easy secret to it: an FNCS partner in the top 25 (two titles, top 10), a full big-events partner in the top 10, nobody the secret never teamed with in the top 3. Ties go to the bigger career earner. A hint names a player halfway between your best rank and #1. The round waits for orgs, facts and majors to load or fail, so a late file cannot re-rank the guesses. **The similarity lab** (dev builds only) has a slider per part, Rank or 0–100 display, the parts on every row and a peek at the ten closest — the roadmap's V1 is about finding the right weights, so they are knobs rather than constants.
+`check:games` holds every Easy secret to it: an FNCS partner in the top 25 (two titles, top 10), a full big-events partner in the top 10, a big-event winning partner among the three closest, nobody the secret never teamed with in the top 3. Ties go to the bigger career earner. A hint names a player halfway between your best rank and #1. The round waits for orgs, facts and majors to load or fail, so a late file cannot re-rank the guesses. **The similarity lab** (dev builds only) has a slider per part, Rank or 0–100 display, the parts on every row and a peek at the ten closest — the roadmap's V1 is about finding the right weights, so they are knobs rather than constants.
 
 ### Rewind
 
@@ -733,7 +734,7 @@ Not added, because the data cannot date them well: a first Global Championship (
 | --- | --- | --- | --- | --- |
 | Easy | 7 | 180 days | Easy-tier players, LAN wins, top-20 orgs; no later titles or FNCS rounds | unlimited |
 | Medium | 8 | 75 days | + Medium, FNCS rounds, later titles | 2 lives |
-| Hard | 10 | 30 days | everyone | 1 life |
+| Hard | 10 | 30 days | everyone | 2 lives (14 Oct 2026) |
 
 7, 8 and 10 are the user's ("maybe overall more events, like 7-8-10"). The gaps are a little wider than the old 5/6/7 deals had (150, 60, 21 days); each level deals 2,000 seeds out of 2,000 and starts failing only far wider (Easy around 450 days, Medium 365, Hard past 180).
 
@@ -752,9 +753,9 @@ Players with three or more organisations: 81 Easy, 594 to Medium, 2,009 in all (
 
 ### Which Lobby?
 
-186 majors, read as rounds and regions off their names (`games/shared/lobbies.ts`: "FNCS 2023 - Major 2: Europe - Grand Finals" is 2023's Major 2, Europe). The leaderboard reveals one finisher per band of its top 20, bottom up — 17th–20th, 13th–16th, 9th–12th, 6th–8th, 4th–5th, 2nd–3rd, the winner — seven per lobby (six for the four with a band and no whole team in it).
+186 majors, read as rounds and regions off their names (`games/shared/lobbies.ts`: "FNCS 2023 - Major 2: Europe - Grand Finals" is 2023's Major 2, Europe). The leaderboard reveals one finisher per band, bottom up — the back half, then closer each time, 2nd–3rd, the winner — six or seven per lobby, sized to how far its results go (`bands`).
 
-- **The same top 20 everywhere** (`CUT`, `BANDS`): the smallest field on record is 22, so every lobby reaches 20th. The reveal used to start in the back half, and the last place it printed named the event — "39th" could only be the Reload Elite Series at the Esports World Cup (the user, 14 Oct 2026: "Don't write down to 50, it can be a spoiler").
+- **No "down to 39th"** (14 Oct 2026): the board's footer said how far the results went, which named the event — 39th could only be the Reload Elite Series at the Esports World Cup (the user: "Don't write down to 50, it can be a spoiler"). The footer now gives the format alone. A fixed top 20 was tried the same day and taken back ("that's not what I meant… Just delete this message").
 - **Whole teams only** (`wholeTeams`): a finisher must be exactly its format's team size, every player on the roster. `career_path.json` lists only players with a page, so a duo whose partner has none came back as one player (FNCS 2023 Major 1 Europe's 36th, Brandtman & Moneymaker, read "Moneymaker"); and a shared place reads as its best end, so two duos tied 35–36 at the Reload Elite Series were one team of four. It showed in 14% of Medium rounds and a third of Hard ones (the user: "1 player and duos"). The two Oceania finals that list two teams at 1st (2023 Major 3, 2025 Major 1) end on 2nd–3rd.
 - **Guessing** is three taps: year, round, region. A wrong guess says whether the lobby was earlier or later and whether the region was right.
 - **Levels**: Easy deals the LANs and the Europe and NA East / North America / NA Central finals (61), with the best-known finisher in each band; Medium adds NA West and Brazil (108); Hard everything (186), anyone in the results.
@@ -900,7 +901,7 @@ From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** 
 | The day | `src/daily/day.ts` | A day is its date in `Europe/Berlin`, so the reset is midnight Central European time through summer time too. `DAILY_START` (5 Oct 2026) is puzzle #1; a day before it shows as "preview". `?day=YYYY-MM-DD` pretends it is another day, on a dev server only |
 | The puzzles | `src/daily/generate.ts`, `src/games/<game>/daily.ts` | A day's set is one small descriptor per game: a secret player and the clues in order, a Tenite board id, a List id, Tic Tac Toe's six rule ids. Each game's `daily.ts` picks one (`pickDaily`) and rebuilds a round from one (`restoreDaily`) |
 | Kept once made | `server/index.ts` `GET /api/daily/<day>`, table `daily_puzzles` | The first request for a day makes its set and the store keeps it; every later request reads the kept one. Never a day after today on the live site |
-| Pinned on the day | `freezeDay` in `generate.ts`, `freezeDaily` in `tenaball/daily.ts` | Until 14 Oct 2026 a Tenite day kept only its board's id and rebuilt the board from whatever data was live, so a data update changed past days, and today's too. Now the first request on or after a day's date copies the whole board, rows and numbers, into its descriptor (`frozen`), with `asOf` — the export's date, or the day itself for a follower board — shown as "As of 13 Oct 2026" under the tie rule; a board about one event gets none. Days made ahead stay unpinned until their date, so they play on their own day's data. Moving a pinned puzzle in the schedule editor unpins it (`unpinned`). Saved rounds are matched on `puzzleId`, the descriptor without `frozen` and `sig`, so pinning orphans nobody. The days served before 14 Oct (#1 to #10) are pinned on the data live when each is next asked for — the 13 Oct export, not the 5 Oct one most were played on |
+| Pinned on the day | `freezeDay` in `generate.ts`, `freezeDaily` in `tenaball/daily.ts` | Until 14 Oct 2026 a Tenite day kept only its board's id and rebuilt the board from whatever data was live, so a data update changed past days, and today's too. Now the first request on or after a day's date copies the whole board, rows and numbers, into its descriptor (`frozen`), with `asOf` — the export's date, or the day itself for a follower board — shown beside the title, "Top 10 by career earnings (as of 13 Oct 2026)" (the user: "career earnings (As of ...) Or something like that, so it's clear from what date it is"). Every other board shows the data's date the same way (`asOfFor` in `TenaballGame.tsx`), today's for a follower board; a board about one event shows none. Days made ahead stay unpinned until their date, so they play on their own day's data. Moving a pinned puzzle in the schedule editor unpins it (`unpinned`). Saved rounds are matched on `puzzleId`, the descriptor without `frozen` and `sig`, so pinning orphans nobody. The days served before 14 Oct (#1 to #10) are pinned on the data live when each is next asked for — the 13 Oct export, not the 5 Oct one most were played on |
 | Your progress | `src/daily/progress.ts`, `useDailyRound.ts` | The round in progress is saved on every move (`daily:<game>`, earlier days in `daily-past:<game>`), so a reload carries on; every finished day goes in `daily-log:<game>`. Browser only — no accounts yet |
 | The end | `src/components/DailyEnd.tsx` | Score, a Wordle-style emoji grid, **Share** (the phone's share sheet, or the clipboard), played / won / streak / best, and the countdown |
 
@@ -923,8 +924,8 @@ From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** 
 
 **Earlier puzzles** (the archive, 8 Oct 2026 — the user: "play previous days games, only if from this website nobody played before"). Every daily from #1 to yesterday can be played, **once per browser**:
 
-- **Where.** `/game/<slug>?puzzle=N` (`usePuzzleDay` in `src/daily/useDay.ts`; anything outside #1 to yesterday is today's). Reached from **📅 Earlier** beside a daily game's title and the missed days under a finished puzzle (`src/components/PastPuzzles.tsx`) — inside the games only: the home page lost its button on 13 Oct 2026, and its strip reads "Today's puzzles" with no number, since each game may count its days from a different start. The page says which day it is, that it will not count towards the streak, and links back to today's.
-- **Once.** A finished day opens to its board and result, never a new round. A day begun and left carries on where it was. A day finished before its board was kept (anything played before 8 Oct 2026) shows the whole board, every answer and number, above "You have played puzzle #N already" and its score (`played` and `answers` in `useDailyRound`; the user, 14 Oct 2026: "have like a full description… even if it [is] the past game"). Which answers were found is not known, so every row is plain. The note above an archive day says whether it was played on the day or late.
+- **Where.** `/game/<slug>?puzzle=N` (`usePuzzleDay` in `src/daily/useDay.ts`; anything outside #1 to yesterday is today's). Reached from **📅 Earlier** beside a daily game's title and the missed days under a finished puzzle (`src/components/PastPuzzles.tsx`) — inside the games only: the home page lost its button on 13 Oct 2026, and its strip reads "Today's puzzles" with no number, since each game may count its days from a different start. The page says which day it is — "📅 The puzzle from Tue 13 Oct · Today's puzzle →", nothing about the streak (14 Oct 2026, the user: "Just write puzzles from . Today's puzzle, no of this played late").
+- **Once.** A finished day opens to its board and result, never a new round. A day begun and left carries on where it was. A day finished before its board was kept (anything played before 8 Oct 2026) shows the whole board, every answer and number, above "You have played puzzle #N already" and its score (`played` and `answers` in `useDailyRound`; the user, 14 Oct 2026: "have like a full description… even if it [is] the past game"). Which answers were found is not known, so every row is plain.
 - **Kept.** `daily:<game>` holds the latest day's round; when a later day starts, the earlier one moves to `daily-past:<game>`, where archive rounds are saved too. The newest 60 finished ones are kept for their boards; unfinished ones always stay. Browser only, like the rest.
 - **The server** already hands out any day up to today, so nothing changed there. The day's set is the one kept, so an archive puzzle is the one everybody had that day.
 - **List** runs its own daily loop (not `useDailyRound`) and has no archive yet; give it one before List is a daily again.

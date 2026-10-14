@@ -109,7 +109,7 @@ file and reload.
 | `teammates.json` | each player's fifty most-played-with teammates | `Teammates` |
 | `orgs.json` | 984 organisations, with who has ever played for them and, for those with a team page, when they were founded and disbanded | `Orgs` |
 | `bios.json` | real names (~2,000 players) and every spell at an organisation with the day it started and ended (~14,500 stints), from `transfers.json` | `Bios` — IRL, Org Chart, Transfer Window, Rewind; without it they fall back to `players.json`'s names and `orgs.json`'s undated lists |
-| `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, where and when they won, which headline events they played | `Facts` |
+| `facts.json` | per player: tournaments played, LAN and FNCS appearances, wins by kind, where and when they won, which headline events they played; `divcups`, every Div Cup final won with its day and region (since 14 Oct 2026) | `Facts` |
 | `rankings.json` | ~290 precomputed top-tens, answered in players, orgs, countries or tournaments | `Rankings` |
 | `pools.json` | the qualified field for one event — Globals 2026, EWC 2026 | `Pools` |
 

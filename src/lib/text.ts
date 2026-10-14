@@ -13,6 +13,8 @@
  * that close, so a vague stub never silently resolves to the wrong person.
  */
 
+import { moneyShort } from '@/lib/format';
+
 /**
  * Cyrillic and Greek letters that look exactly like Latin ones.
  *
@@ -204,19 +206,43 @@ export function ambiguousNames(players: readonly Nameable[]): Set<string> {
   return out;
 }
 
+/** A player as `namedPlayer` tells them apart. */
+export interface Namesake {
+  id: string;
+  name: string;
+  countryName?: string | null;
+  earnings?: number;
+}
+
+/** Normalised handle -> every player answering to it, for the handles two or more share. */
+export function namesakesOf<T extends Namesake>(players: readonly T[]): Map<string, T[]> {
+  const out = new Map<string, T[]>();
+  for (const player of players) {
+    const key = normalizeName(player.name);
+    out.set(key, [...(out.get(key) ?? []), player]);
+  }
+  for (const [key, group] of out) if (group.length < 2) out.delete(key);
+  return out;
+}
+
 /**
  * A handle as a rule names it: "Chap", or "Chap (Poland)" when another player
- * in `ambiguous` (from `ambiguousNames`) answers to it too. Three players are
- * called Chap, and "10+ events with Chap" did not say which (the user, 14 Oct
- * 2026: "it should be specified which exactly").
+ * answers to it too. Three players are called Chap, and "10+ events with Chap"
+ * did not say which (the user, 14 Oct 2026: "it should be specified which
+ * exactly"). When a namesake is from the same country as well — Cooper and
+ * Deyy each have one in the United States — the career earnings follow:
+ * "Cooper (United States, $1.2M)", which picks out the famous one at a
+ * glance. Level on that too, the Liquipedia page name.
  */
-export function namedPlayer(
-  player: { id: string; name: string; countryName?: string | null },
-  ambiguous: ReadonlySet<string>,
-): string {
-  if (!ambiguous.has(normalizeName(player.name))) return player.name;
-  const where = player.countryName ?? disambiguator(player.id);
-  return where ? `${player.name} (${where})` : player.name;
+export function namedPlayer(player: Namesake, namesakes: ReadonlyMap<string, readonly Namesake[]>): string {
+  const others = (namesakes.get(normalizeName(player.name)) ?? []).filter((other) => other.id !== player.id);
+  if (others.length === 0) return player.name;
+  const country = player.countryName ?? null;
+  if (country && others.every((other) => other.countryName !== country)) return `${player.name} (${country})`;
+  if (player.earnings !== undefined && others.every((other) => other.earnings !== player.earnings)) {
+    return `${player.name} (${country ? `${country}, ` : ''}${moneyShort(player.earnings)})`;
+  }
+  return `${player.name} (${player.id.replace(/_/g, ' ')})`;
 }
 
 /** Deterministic avatar colour from a player id. */

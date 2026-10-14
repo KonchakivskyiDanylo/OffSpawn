@@ -42,7 +42,9 @@ import {
 } from './engine';
 import { derivedBoards } from './derived-boards';
 import { globalsBoards } from './globals-boards';
-import { socialBoards } from './social-boards';
+import { SOCIAL_GROUP, socialBoards } from './social-boards';
+import { recordBoards } from './record-boards';
+import { winnerBoards } from './winner-boards';
 import { useSocials } from '@/data/useSocials';
 import { poolRankings } from './pool-boards';
 import './tenaball.css';
@@ -94,7 +96,7 @@ function Game({
   const daily = useDailyRound('tenaball', {
     on: dailyOn,
     ready: socials !== null,
-    restore: (puzzle, saved) => restoreDaily(puzzle, rankings, roster, socials, majors, saved),
+    restore: (puzzle, saved) => restoreDaily(puzzle, rankings, roster, socials, majors, saved, facts),
     snapshot,
     finished: (state) => state.status !== 'playing',
     result: dailyResult,
@@ -122,18 +124,18 @@ function Game({
   const pool = activePool(pools, event);
 
   /**
-   * Career facts, loaded only inside an event mode.
+   * Career facts, loaded for the board picker and inside an event mode.
    *
    * Three of the field boards — LAN appearances, FNCS grand finals played,
-   * tournaments played — are the only thing in this game that needs
-   * `facts.json`, and it is 577 KB. Everyone who opens Tenaball on the whole
-   * scene would be paying for boards they cannot reach, so this is a
-   * deliberate conditional load rather than another `useFacts()` at the top.
-   * The boards appear when it lands; `poolBoards` simply omits them until then.
+   * tournaments played — and the FNCS and Div Cup winners boards need
+   * `facts.json`, which is over 700 KB. The daily does not: its board comes
+   * pinned in the day's descriptor, so the live site, daily only, never pays
+   * for it. The boards appear when it lands, without holding the page up.
    */
   const [facts, setFacts] = useState<Facts | null>(null);
+  const wantFacts = Boolean(pool) || !dailyOn;
   useEffect(() => {
-    if (!pool) return;
+    if (!wantFacts) return;
     let cancelled = false;
     loadFacts().then(
       (loaded) => {
@@ -145,7 +147,7 @@ function Game({
     return () => {
       cancelled = true;
     };
-  }, [pool]);
+  }, [wantFacts]);
 
   /**
    * The boards on offer: this field's, or the shipped all-time set.
@@ -181,11 +183,12 @@ function Game({
           ...rankings.boards,
           ...globalsBoards(majors, roster),
           ...derivedBoards(roster.players),
+          ...(facts ? [...winnerBoards(facts, roster), ...recordBoards(facts, roster)] : []),
           ...socialBoards(roster, socials),
         ],
         tournaments: rankings.tournaments,
       }),
-    [rankings, roster, socials, majors],
+    [rankings, roster, socials, majors, facts],
   );
 
   const active = derived ?? allTime;
@@ -266,7 +269,7 @@ function Game({
         <div className="stack tb-play">
           {answers ? (
             <>
-              <BoardHead board={answers.board} />
+              <BoardHead board={answers.board} generated={rankings.generated} />
               <Slots game={answers} reveal />
             </>
           ) : null}
@@ -406,7 +409,7 @@ function Game({
           <Stat label="Best" value={best} />
         </div>
 
-        <BoardHead board={board} />
+        <BoardHead board={board} generated={rankings.generated} />
         <Slots game={game} />
 
         {feedback ? (
@@ -471,21 +474,35 @@ function Game({
 }
 
 /**
- * The board's name, its tie rule, and on a daily pinned on its day the date
- * its numbers are from (the user, 14 Oct 2026: "write somewhere like earnings
- * as of …") — a past day keeps the board it was played on.
+ * The date a board's numbers are from: the one a daily was pinned with, or for
+ * any other board the data's — today's for the follower counts, which the
+ * server fetches daily. None for a board about one tournament, whose results
+ * do not move.
  */
-function BoardHead({ board }: { board: Board }) {
+function asOfFor(board: Board, generated: string): string | null {
+  if (board.asOf) return board.asOf;
+  if (board.id.startsWith('tournament:')) return null;
+  return board.group === SOCIAL_GROUP ? new Date().toISOString().slice(0, 10) : generated || null;
+}
+
+/**
+ * The board's name with the date its numbers are from beside it — "Top 10 by
+ * career earnings (as of 13 Oct 2026)" (the user, 14 Oct 2026: "career
+ * earnings (As of ...) Or something like that, so it's clear from what date
+ * it is") — then its tie rule. A past daily keeps the date it was played on.
+ */
+function BoardHead({ board, generated }: { board: Board; generated: string }) {
+  const asOf = asOfFor(board, generated);
   return (
     <section className="card tb-head">
       <div className="tb-head__row">
         <span className="tb-head__group">{board.group}</span>
-        <h2 className="tb-head__title">{board.title}</h2>
+        <h2 className="tb-head__title">
+          {board.title}
+          {asOf ? <span className="tb-head__asof"> (as of {dayMonthYear(asOf)})</span> : null}
+        </h2>
       </div>
-      <p className="tiny faint">
-        {board.tieRule}
-        {board.asOf ? <span className="tb-head__asof"> As of {dayMonthYear(board.asOf)}.</span> : null}
-      </p>
+      <p className="tiny faint">{board.tieRule}</p>
       <WhatCounts terms={termsIn(`${board.group} ${board.title}`, board.id)} />
     </section>
   );
