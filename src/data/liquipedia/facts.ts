@@ -215,6 +215,9 @@ export class Facts {
   /** event index -> player ids who won it. Built lazily, once. */
   private winners: Map<number, Set<string>> | null = null;
   private backToBack: Set<string> | null = null;
+  private majorBackToBack: Set<string> | null = null;
+  private fncsRuns: Map<string, number> | null = null;
+  private majorRuns: Map<string, number> | null = null;
 
   constructor(payload: RawPayload) {
     this.generated = payload.generated;
@@ -345,17 +348,65 @@ export class Facts {
 
   /** Players who won two rounds of the FNCS in a row, in any regions. */
   backToBackWinners(): ReadonlySet<string> {
-    if (!this.backToBack) {
-      const out = new Set<string>();
-      let previous = new Set<string>();
-      for (const round of this.fncsRounds) {
-        const here = new Set(round.flatMap((event) => [...this.wonAt(event.index)]));
-        for (const id of here) if (previous.has(id)) out.add(id);
-        previous = here;
-      }
-      this.backToBack = out;
-    }
+    this.backToBack ??= new Set([...this.fncsWinRuns].flatMap(([id, run]) => (run >= 2 ? [id] : [])));
     return this.backToBack;
+  }
+
+  /** Players who won two majors in a row — see `majorRounds`. */
+  majorBackToBackWinners(): ReadonlySet<string> {
+    this.majorBackToBack ??= new Set([...this.majorWinRuns].flatMap(([id, run]) => (run >= 2 ? [id] : [])));
+    return this.majorBackToBack;
+  }
+
+  /**
+   * Every major in order: each round of the FNCS as one, and each LAN — a
+   * Globals, the World Cup finals, the 2022 Invitational, the 2026 Summit,
+   * Reload's championship — as its own.
+   *
+   * Winning majors back to back is not winning the FNCS back to back (the
+   * user, 15 Oct 2026: "Major tournament back to back isn't the same as fncs
+   * back to back"). Scroll and Skyboy won EU's Major 1 and Major 2 of 2026,
+   * two FNCS in a row, but lost the Summit in between.
+   */
+  get majorRounds(): HeadlineEvent[][] {
+    const rounds = this.fncsRounds.map((round) => round.filter((event) => !event.lan));
+    const lans = this.events.filter((event) => event.lan).map((event) => [event]);
+    return [...rounds, ...lans].sort((a, b) => (a[0].date < b[0].date ? -1 : a[0].date > b[0].date ? 1 : 0));
+  }
+
+  /** Each winner's most FNCS rounds won in a row: a round they won nothing in ends the run. */
+  get fncsWinRuns(): ReadonlyMap<string, number> {
+    this.fncsRuns ??= this.winRuns(this.fncsRounds);
+    return this.fncsRuns;
+  }
+
+  /**
+   * Each winner's most majors won in a row. A round of the FNCS they did not
+   * win ends the run, as on the FNCS's own count; so does a LAN they played
+   * and lost. A LAN they were not at is passed over: most are by invitation or
+   * qualified for separately, so missing one is not losing it.
+   */
+  get majorWinRuns(): ReadonlyMap<string, number> {
+    this.majorRuns ??= this.winRuns(this.majorRounds, (round, id) => round[0].lan && !round.some((event) => this.playedAt(event.index).has(id) || this.wonAt(event.index).has(id)));
+    return this.majorRuns;
+  }
+
+  private winRuns(
+    rounds: readonly HeadlineEvent[][],
+    passOver: (round: readonly HeadlineEvent[], id: string) => boolean = () => false,
+  ): Map<string, number> {
+    const best = new Map<string, number>();
+    let running = new Map<string, number>();
+    for (const round of rounds) {
+      const next = new Map<string, number>();
+      for (const [id, run] of running) if (passOver(round, id)) next.set(id, run);
+      for (const event of round) {
+        for (const id of this.wonAt(event.index)) next.set(id, (running.get(id) ?? 0) + 1);
+      }
+      for (const [id, run] of next) best.set(id, Math.max(best.get(id) ?? 0, run));
+      running = next;
+    }
+    return best;
   }
 
   /**

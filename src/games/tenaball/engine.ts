@@ -95,10 +95,20 @@ export function giveUp(state: GameState): GameState {
   return state.status === 'playing' ? { ...state, status: 'lost' } : state;
 }
 
+/** One row a right guess went into, and the names it still wants — 0 once it closed. */
+export interface Placed {
+  rank: number;
+  remaining: number;
+}
+
 export type GuessOutcome =
-  | { kind: 'correct'; rank: number }
+  /**
+   * `placed` is every row the name went into, top first: one on almost every
+   * board, several on the pairs board, where one player is on more than one row.
+   */
+  | { kind: 'correct'; rank: number; placed: Placed[] }
   /** Right row, but the team it ranks is not complete yet. */
-  | { kind: 'partial'; rank: number; remaining: number }
+  | { kind: 'partial'; rank: number; remaining: number; placed: Placed[] }
   | { kind: 'duplicate'; rank: number }
   /** Level with the entry already holding a shared 10th — costs nothing. */
   | { kind: 'level'; rank: number; holder: string }
@@ -144,37 +154,42 @@ export function applyGuess(
   if (!key) return { state, outcome: { kind: 'unknown' } };
 
   const slots = slotsIn(state);
-  // A player can be on more than one row of a pairs board — Peterbot & Pollo,
-  // Peterbot & Cold — so the name goes to a row still missing it, one already
-  // begun first; only when every row of theirs has it is it a repeat.
+  // A player can be on more than one row of a pairs board — Arkhram & EpikWhale,
+  // EpikWhale & rehx — and one guess names them on every row of theirs (the
+  // user, 15 Oct 2026: "I had to type rehx, arkhram and epikwhale twice").
+  // Only when every row of theirs already has them is it a repeat.
   const holding = slots.flatMap((slot, i) => (slot.members.some((member) => member.key === key) ? [i] : []));
-  const open = holding.filter((i) => !namedIn(state, i + 1).has(key));
-  let index = open.length ? (open.find((i) => namedIn(state, i + 1).size > 0) ?? open[0]) : (holding[0] ?? -1);
-  let wanted = index >= 0 ? slots[index].members : [];
+  const wanted = new Map(holding.map((i) => [i, slots[i].members]));
   const last = slots[slots.length - 1];
-  if (index < 0 && last.also?.some((member) => member.key === key)) {
+  if (!holding.length && last.also?.some((member) => member.key === key)) {
     // A shared cut: the other level entry takes 10th while nobody holds it.
     if (namedIn(state, last.rank).size > 0) {
       const holder = last.members.map((member) => member.label).join(' & ');
       return { state, outcome: { kind: 'level', rank: last.rank, holder } };
     }
-    index = slots.length - 1;
-    wanted = last.also;
+    wanted.set(slots.length - 1, last.also);
   }
-  if (index >= 0) {
-    const rank = index + 1;
-    const already = namedIn(state, rank);
-    if (already.has(key)) return { state, outcome: { kind: 'duplicate', rank } };
+  if (wanted.size) {
+    const open = [...wanted.keys()].filter((i) => !namedIn(state, i + 1).has(key));
+    if (!open.length) return { state, outcome: { kind: 'duplicate', rank: [...wanted.keys()][0] + 1 } };
 
-    const names = new Set(already).add(key);
-    const named = new Map(state.named).set(rank, names);
-    if (names.size < wanted.length) {
+    const named = new Map(state.named);
+    const found = new Set(state.found);
+    const placed: Placed[] = open.map((i) => {
+      const rank = i + 1;
+      const names = new Set(namedIn(state, rank)).add(key);
+      named.set(rank, names);
+      const remaining = wanted.get(i)!.length - names.size;
+      if (remaining === 0) found.add(rank);
+      return { rank, remaining };
+    });
+    const closed = placed.find((row) => row.remaining === 0);
+    if (!closed) {
       return {
         state: { ...state, named },
-        outcome: { kind: 'partial', rank, remaining: wanted.length - names.size },
+        outcome: { kind: 'partial', rank: placed[0].rank, remaining: placed[0].remaining, placed },
       };
     }
-    const found = new Set(state.found).add(rank);
     return {
       state: {
         ...state,
@@ -182,7 +197,7 @@ export function applyGuess(
         found,
         status: found.size === state.board.rows.length ? 'won' : 'playing',
       },
-      outcome: { kind: 'correct', rank },
+      outcome: { kind: 'correct', rank: closed.rank, placed },
     };
   }
 

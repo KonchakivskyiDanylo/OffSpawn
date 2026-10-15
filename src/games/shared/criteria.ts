@@ -249,6 +249,17 @@ export function buildCriteria(
     'Won FNCS back to back',
     (p) => backToBack.has(p.id),
   );
+  // Majors are not the FNCS (the user, 15 Oct 2026): a Globals or a LAN between
+  // two FNCS wins ends this run and not that one. The same kind, so a board
+  // weighs the two as one question and the near-duplicate rule keeps them apart.
+  const majorsBackToBack = facts.majorBackToBackWinners();
+  add(
+    'majors-back-to-back',
+    'fncs-back-to-back',
+    'has won two majors in a row',
+    'Won majors back to back',
+    (p) => majorsBackToBack.has(p.id),
+  );
 
   /*
    * "Won FNCS with Peterbot": anyone who was on one of his winning teams.

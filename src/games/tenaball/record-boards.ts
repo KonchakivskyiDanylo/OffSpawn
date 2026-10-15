@@ -2,7 +2,7 @@ import type { Facts } from '@/data/liquipedia/facts';
 import type { Board } from '@/data/liquipedia/rankings';
 import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
 import { money, monthYear } from '@/lib/format';
-import { board, byValue, NEEDED, TIE_EARNINGS, TIE_GROUP_EARNINGS, type Ranked } from './board-builder';
+import { board, byValue, NEEDED, SLOTS, TIE_EARNINGS, TIE_GROUP_EARNINGS, type Ranked } from './board-builder';
 import { dayNumber, FNCS_WINNERS_GROUP, fncsRegion, fncsWins, TIE_FIRST, TIE_LAST } from './winner-boards';
 
 /**
@@ -11,7 +11,10 @@ import { dayNumber, FNCS_WINNERS_GROUP, fncsRegion, fncsWins, TIE_FIRST, TIE_LAS
  * ten to win on their very first final and the longest road to a first win,
  * the longest wait between two wins, the most finals in a row, the pairs with
  * the most major titles, the countries with the most different winners, and
- * the top earners born in each year.
+ * the top earners born in each year. Added 15 Oct 2026: the most major titles
+ * in a row, beside the FNCS's own count in `rankings.json`; each FNCS region's
+ * youngest and oldest winners; and the fewest finals before a first win again
+ * for first wins from 2021 and from 2022.
  *
  * Asked for and not built, because the data does not make a fair ten: the
  * first ten to win in two FNCS regions (nine players have), the fewest finals
@@ -167,23 +170,48 @@ export function recordBoards(facts: Facts, roster: Roster): Board[] {
     );
     // Fewest finals before a first win in the region: 0 is winning on debut there.
     // Level counts go to whoever won first — the earlier day, then the bigger earner.
-    const fewest = [...byPlayer].flatMap(([id, finals]) => {
-      const sorted = [...finals].sort((a, b) => (a.date < b.date ? -1 : 1));
-      const at = sorted.findIndex((f) => f.won);
-      if (at < 0) return [];
-      return [{ key: id, label: player(id).name, value: at, display: at === 0 ? 'won on debut' : `${at} before`, tiebreak: -dayNumber(sorted[at].date) * 1e9 + player(id).earnings }];
+    // Again for first wins from 2021 and from 2022, every final before the win
+    // still counted, 2020's included: the whole-history board is the first
+    // seasons' debut winners (the user, 15 Oct 2026: "count from 1st january
+    // 2021, and 3rd from 2022… we still count the fncs they qualed").
+    // A region whose finals began later — NA Central, from 2023 — gives the
+    // same ten every time, and the same board twice is not a second board.
+    let previous = '';
+    for (const from of [null, 2021, 2022]) {
+      const fewest = [...byPlayer].flatMap(([id, finals]) => {
+        const sorted = [...finals].sort((a, b) => (a.date < b.date ? -1 : 1));
+        const at = sorted.findIndex((f) => f.won);
+        if (at < 0 || (from && sorted[at].date < `${from}-01-01`)) return [];
+        return [{ key: id, label: player(id).name, value: at, display: at === 0 ? 'won on debut' : `${at} before`, tiebreak: -dayNumber(sorted[at].date) * 1e9 + player(id).earnings }];
+      });
+      const ranked = byValue(fewest, true);
+      const same = ranked.slice(0, NEEDED).map((entry) => entry.key).join('|');
+      if (same === previous) continue;
+      previous = same;
+      push(
+        board(
+          from ? `fncs-fewest-finals:${region}:${from}` : `fncs-fewest-finals:${region}`,
+          FNCS_WINNERS_GROUP,
+          from ? `Fewest FNCS finals before a first win — ${where}, first wins since ${from}` : `Fewest FNCS finals before a first win — ${where}`,
+          'player',
+          from
+            ? `${where} grand finals played before the first ${where} win, for players whose first ${where} win came in ${from} or later; their finals before ${from} count too. 0 is winning on debut. Level counts go to whoever won first.`
+            : `${where} grand finals played before the first ${where} win; 0 is winning on debut. Level counts go to whoever won first.`,
+          ranked,
+          true,
+        ),
+      );
+    }
+
+    // The youngest and oldest to win the region's FNCS (the user, 15 Oct 2026:
+    // "youngest fncs winners on eu"): age at the first and the latest win there.
+    const regionAges = [...byPlayer].flatMap(([id, finals]) => {
+      const born = player(id).birthDate;
+      const won = finals.filter((f) => f.won).map((f) => f.date).sort();
+      return born && won.length ? [{ id, young: daysBetween(born, won[0]), old: daysBetween(born, won[won.length - 1]) }] : [];
     });
-    push(
-      board(
-        `fncs-fewest-finals:${region}`,
-        FNCS_WINNERS_GROUP,
-        `Fewest FNCS finals before a first win — ${where}`,
-        'player',
-        `${where} grand finals played before the first ${where} win; 0 is winning on debut. Level counts go to whoever won first.`,
-        byValue(fewest, true),
-        true,
-      ),
-    );
+    push(board(`fncs-youngest:${region}`, FNCS_WINNERS_GROUP, `Top 10 youngest FNCS winners — ${where}`, 'player', `Age on the day of their first ${where} FNCS win, youngest first, ${ageRule}`, byValue(regionAges.map((a) => row(a.id, a.young, yearsMonths(a.young))), true), true));
+    push(board(`fncs-oldest:${region}`, FNCS_WINNERS_GROUP, `Top 10 oldest FNCS winners — ${where}`, 'player', `Age on the day of their latest ${where} FNCS win, oldest first, ${ageRule}`, byValue(regionAges.map((a) => row(a.id, a.old, yearsMonths(a.old))))));
   }
 
   // ------------------------------------------------------------- in a row --
@@ -201,6 +229,26 @@ export function recordBoards(facts: Facts, roster: Roster): Board[] {
     return best >= 2 ? [row(p.id, best, `${best} in a row`)] : [];
   });
   push(board('fncs-in-a-row', FNCS_WINNERS_GROUP, 'Top 10 most FNCS grand finals in a row', 'player', `Rounds of grand finals in a row, in any region. ${TIE_EARNINGS}`, byValue(streaks)));
+
+  // Major titles in a row, beside "Top 10 by consecutive FNCS titles" from the
+  // notebook: the Globals and the LANs are majors and not FNCS rounds, so
+  // losing one between two FNCS wins ends this run and not that one (the user,
+  // 15 Oct 2026). A winner with no page as long a run as the 11th's would hide
+  // a place: no board.
+  const majorRuns = [...facts.majorWinRuns].filter(([, run]) => run >= 2);
+  const majorRanked = byValue(majorRuns.filter(([id]) => onRoster(id)).map(([id, run]) => row(id, run, `${run} titles in a row`)));
+  if (majorRanked.length >= NEEDED && !majorRuns.some(([id, run]) => !onRoster(id) && run >= majorRanked[SLOTS].value)) {
+    push(
+      board(
+        'majors-in-a-row',
+        'Players',
+        'Top 10 by consecutive major titles',
+        'player',
+        `Majors won one after another. Every round of the FNCS is one major, and so is each Globals and major LAN, so losing the Globals between two FNCS wins ends the run; a LAN they were not at is passed over. ${TIE_EARNINGS}`,
+        majorRanked,
+      ),
+    );
+  }
 
   // ------------------------------------------------------------------ pairs --
   // Major titles: every FNCS final, Global Championship and major LAN won. A

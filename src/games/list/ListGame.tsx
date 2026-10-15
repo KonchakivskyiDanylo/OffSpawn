@@ -667,6 +667,7 @@ function groupOf(criterion: Criterion): string {
     case 'fncs-wins':
     case 'fncs-apps':
     case 'fncs-back-to-back':
+    case 'majors-back-to-back':
     case 'fncs-age':
       return 'FNCS';
     case 'earnings':

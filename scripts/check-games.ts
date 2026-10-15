@@ -703,7 +703,7 @@ if (rankings) {
   if (facts) {
     const winners = winnerBoards(facts, roster);
     const records = recordBoards(facts, roster);
-    for (const id of ['first-million', 'fncs-first-to:5', 'fncs-debut', 'fncs-youngest', 'fncs-oldest', 'fncs-long-road', 'fncs-comebacks', 'fncs-in-a-row', 'pairs-major-titles', 'countries-fncs-winners', 'born:2006', 'fncs-last:Europe', 'divcup-last:Europe', 'fncs-win-rate', 'fncs-win-rate:Europe', 'fncs-fewest-finals:Europe']) {
+    for (const id of ['first-million', 'fncs-first-to:5', 'fncs-debut', 'fncs-youngest', 'fncs-oldest', 'fncs-long-road', 'fncs-comebacks', 'fncs-in-a-row', 'pairs-major-titles', 'countries-fncs-winners', 'born:2006', 'fncs-last:Europe', 'divcup-last:Europe', 'fncs-win-rate', 'fncs-win-rate:Europe', 'fncs-fewest-finals:Europe', 'fncs-fewest-finals:Europe:2021', 'fncs-fewest-finals:Europe:2022', 'fncs-youngest:Europe', 'fncs-oldest:Europe', 'majors-in-a-row']) {
       check([...winners, ...records].some((board) => board.id === id), `tenaball: no "${id}" board`);
     }
     for (const board of [...winners, ...records]) {
@@ -711,18 +711,23 @@ if (rankings) {
       check(board.id.includes('-all:') || Boolean(board.next.key), `tenaball: ${board.id} has no 11th`);
     }
     notes.push(`tenaball: ${winners.length} FNCS and Div Cup winners boards, ${records.length} records`);
-    // On the pairs board one player is on several rows: naming them fills each row in turn.
+    // On the pairs board one player is on several rows: naming them once names
+    // them on every one (15 Oct 2026), and a second time is a repeat.
     const pairsBoard = records.find((board) => board.id === 'pairs-major-titles');
     const shared = pairsBoard?.rows.flatMap((row) => row.members ?? []).find((member, i, all) => all.findIndex((m) => m.key === member.key) !== i);
     if (pairsBoard && shared) {
-      let game = tenaball.createGame(pairsBoard, 'easy');
-      for (const row of pairsBoard.rows) {
-        if (!row.members?.some((member) => member.key === shared.key)) continue;
-        for (const member of row.members) game = tenaball.applyGuess(game, member.key, member.label).state;
+      const theirs = pairsBoard.rows.flatMap((row, i) => (row.members?.some((member) => member.key === shared.key) ? [i + 1] : []));
+      const once = tenaball.applyGuess(tenaball.createGame(pairsBoard, 'easy'), shared.key, shared.label);
+      const placed = once.outcome.kind === 'partial' || once.outcome.kind === 'correct' ? once.outcome.placed.map((row) => row.rank) : [];
+      check(placed.join() === theirs.join(), `tenaball: naming ${shared.label} once filled rows ${placed.join(', ') || 'none'}, not ${theirs.join(', ')}`);
+      let game = once.state;
+      for (const rank of theirs) {
+        for (const member of pairsBoard.rows[rank - 1].members ?? []) {
+          if (member.key !== shared.key) game = tenaball.applyGuess(game, member.key, member.label).state;
+        }
       }
-      const rows = pairsBoard.rows.filter((row) => row.members?.some((member) => member.key === shared.key)).length;
-      const filled = pairsBoard.rows.filter((row, i) => row.members?.some((member) => member.key === shared.key) && game.found.has(i + 1)).length;
-      check(filled === rows, `tenaball: ${shared.label} filled ${filled} of their ${rows} pairs`);
+      check(theirs.every((rank) => game.found.has(rank)), `tenaball: ${shared.label}'s ${theirs.length} pairs did not all close`);
+      check(tenaball.applyGuess(game, shared.key, shared.label).outcome.kind === 'duplicate', `tenaball: naming ${shared.label} again was not a repeat`);
     }
   }
   const byGroup = new Map<string, number>();
@@ -1224,6 +1229,14 @@ if (facts && orgs) {
     const backToBack = all.find((criterion) => criterion.id === 'fncs-back-to-back');
     check(Boolean(backToBack), 'criteria: no back-to-back FNCS rule');
     notes.push(`criteria: ${backToBack?.matches.length ?? 0} back-to-back FNCS winners`);
+    // Majors back to back is its own rule (15 Oct 2026): Scroll and Skyboy won
+    // EU's Major 1 and 2 of 2026 but lost the Summit between them.
+    const majorsBackToBack = all.find((criterion) => criterion.id === 'majors-back-to-back');
+    check(Boolean(majorsBackToBack), 'criteria: no back-to-back majors rule');
+    if (roster.players.some((p) => p.id === 'Scroll')) {
+      check(facts.backToBackWinners().has('Scroll') && !facts.majorBackToBackWinners().has('Scroll'), 'criteria: Scroll should have won the FNCS back to back and not majors');
+    }
+    notes.push(`criteria: ${majorsBackToBack?.matches.length ?? 0} back-to-back major winners`);
 
     // Podium needs the appendix cell's `podium`; a file from before it has none.
     const podiums = roster.players.some((p) => facts.of(p.id).podium.length > 0);

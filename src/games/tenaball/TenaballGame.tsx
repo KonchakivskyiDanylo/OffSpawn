@@ -38,6 +38,7 @@ import {
   slotsIn,
   type Difficulty,
   type GameState,
+  type Placed,
   record as roundRecord,
 } from './engine';
 import { derivedBoards } from './derived-boards';
@@ -50,6 +51,36 @@ import { poolRankings } from './pool-boards';
 import './tenaball.css';
 
 const meta = getGame('tenaball')!;
+
+/** "1st", "1st and 2nd", "1st, 2nd and 4th". */
+const ranksText = (rows: readonly Placed[]) => {
+  const words = rows.map((row) => ordinal(row.rank));
+  return words.length > 1 ? `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}` : words[0];
+};
+
+/**
+ * What a right guess says. One row reads as it always has; a name that went
+ * into several rows of the pairs board says every one of them, closed or not.
+ */
+function placedMessage(name: string, placed: readonly Placed[], team: boolean): string {
+  if (placed.length === 1) {
+    const [{ rank, remaining }] = placed;
+    if (remaining > 0) return `${name} — ${ordinal(rank)}. ${plural(remaining, 'name')} to go on that one.`;
+    // A team slot closing is worth saying out loud; a one-name board has
+    // nothing to close, so it keeps the flatter wording it always had.
+    return team ? `${name} — that completes ${ordinal(rank)}.` : `${name} — number ${rank}.`;
+  }
+  const closed = placed.filter((row) => row.remaining === 0);
+  const open = placed.filter((row) => row.remaining > 0);
+  if (!open.length) return `${name} — that completes ${ranksText(closed)}.`;
+  const same = open.every((row) => row.remaining === open[0].remaining);
+  if (!closed.length && same) return `${name} — ${ranksText(open)}. ${plural(open[0].remaining, 'name')} to go on each.`;
+  // "2nd has 1 name to go", "2nd and 4th have 1 name to go each", or row by row when they differ.
+  const left = same
+    ? `${ranksText(open)} ${open.length > 1 ? 'have' : 'has'} ${plural(open[0].remaining, 'name')} to go${open.length > 1 ? ' each' : ''}`
+    : open.map((row) => `${ordinal(row.rank)} has ${plural(row.remaining, 'name')} to go`).join(', ');
+  return closed.length ? `${name} — that completes ${ranksText(closed)}; ${left}.` : `${name} — ${left}.`;
+}
 
 const DIFFICULTIES: { id: Difficulty; label: string; hint: string }[] = [
   { id: 'easy', label: '🟢 Easy', hint: 'Unlimited guesses.' },
@@ -341,28 +372,12 @@ function Game({
     // body re-renders forever.
     if (result.state.status !== 'playing') submitScore(result.state.found.size);
     switch (result.outcome.kind) {
-      case 'correct': {
-        // A team slot closing is worth saying out loud; a one-name board has
-        // nothing to close, so it keeps the flatter wording it always had.
-        const rank = result.outcome.rank;
-        const team = slotsIn(result.state)[rank - 1].members.length > 1;
-        setFeedback({
-          tone: 'var(--success)',
-          message: team
-            ? `${entity.name} — that completes ${ordinal(rank)}.`
-            : `${entity.name} — number ${rank}.`,
-        });
+      case 'correct':
+      case 'partial': {
+        const team = slotsIn(result.state)[result.outcome.rank - 1].members.length > 1;
+        setFeedback({ tone: 'var(--success)', message: placedMessage(entity.name, result.outcome.placed, team) });
         break;
       }
-      case 'partial':
-        setFeedback({
-          tone: 'var(--success)',
-          message: `${entity.name} — ${ordinal(result.outcome.rank)}. ${plural(
-            result.outcome.remaining,
-            'name',
-          )} to go on that one.`,
-        });
-        break;
       case 'duplicate':
         setFeedback({ tone: 'var(--warning)', message: `${entity.name} is already on the board.` });
         break;

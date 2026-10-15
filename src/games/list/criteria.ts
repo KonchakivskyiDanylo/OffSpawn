@@ -263,6 +263,15 @@ export function buildCriteria(
     roster.players.filter((player) => backToBack.has(player.id)),
     'Two consecutive rounds of FNCS grand finals',
   );
+  // Not the same list (the user, 15 Oct 2026): the Globals and the LANs are
+  // majors too, so losing the Globals between two FNCS wins is not back to back.
+  const majorsBackToBack = facts.majorBackToBackWinners();
+  add(
+    'majors-back-to-back',
+    'Players who have won majors back to back',
+    roster.players.filter((player) => majorsBackToBack.has(player.id)),
+    'Two majors in a row — FNCS rounds, the Globals and major LANs all count',
+  );
 
   // How old they were on the day of a regional final they won. A player with
   // no published birthday is on neither side rather than guessed.

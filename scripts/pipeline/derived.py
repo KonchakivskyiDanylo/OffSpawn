@@ -1378,6 +1378,8 @@ def build(BASE):
           phrase('final in a row', 'finals in a row'))
     board('fncs-streak-wins', 'Players', 'Top 10 by consecutive FNCS titles', 'player',
           "Winning your region's grand final in consecutive rounds of the FNCS. "
+          'A Globals or a LAN in between is not an FNCS round, so losing one does not '
+          'end the run - the consecutive major titles board counts those. '
           + TIE_FAME,
           rank_fame(Counter({p: longest_run(s) for p, s in won_waves.items()})),
           phrase('title in a row', 'titles in a row'))

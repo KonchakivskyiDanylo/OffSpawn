@@ -472,7 +472,8 @@ export const GAMES: GameMeta[] = [
           'Won EU FNCS, Won FNCS in 2023, Won a Duo FNCS — regional finals; a Globals is not an FNCS win.',
           'Won FNCS with Peterbot — was on one of their winning teams.',
           'FNCS winner before 16 — age on the day of the final.',
-          'Won FNCS back to back — two finals in a row, any region.',
+          'Won FNCS back to back — two rounds of finals in a row, any region.',
+          'Won majors back to back — two majors in a row, the Globals and LANs included: losing the Globals between two FNCS wins ends it.',
           'Top 3 at a major LAN. Played at an event — was in its field.',
           'Hard only: Div Cups, Performance Evaluations and a year’s prize money.',
         ],
@@ -605,7 +606,7 @@ export const GAMES: GameMeta[] = [
         ],
       },
     ],
-    terms: ['nationality', 'region', 'org', 'fncs-title', 'fncs-final', 'lan', 'global', 'earnings', 'teammates'],
+    terms: ['nationality', 'region', 'org', 'fncs-title', 'fncs-final', 'major', 'lan', 'global', 'earnings', 'teammates'],
     // New 30 Sep 2026, not hosted yet.
     hidden: true,
     Component: lazy(() => import('./bingo/BingoGame')),
