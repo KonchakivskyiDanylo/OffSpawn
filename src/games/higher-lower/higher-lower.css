@@ -78,6 +78,49 @@
   font-size: 1.05rem;
 }
 
+/* The daily's ten pairs, as squares: grey to come, green right, red wrong. */
+.hl-progress {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+.hl-progress__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+}
+.hl-progress__dot--right {
+  background: var(--success);
+  border-color: var(--success);
+}
+.hl-progress__dot--wrong {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.hl-progress__dot--current {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.hl-recap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hl-recap__row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.hl-recap__mark {
+  flex: none;
+  width: 1.6em;
+  text-align: center;
+  color: var(--text-faint);
+}
+
 @media (max-width: 640px) {
   .hl-board {
     grid-template-columns: 1fr;

@@ -1,21 +1,22 @@
 import { loadFacts, type Facts } from '@/data/liquipedia/facts';
 import { loadMajors, type Majors } from '@/data/liquipedia/majors';
 import { loadOrgs, type Orgs } from '@/data/liquipedia/orgs';
-import { loadRankings, type Rankings } from '@/data/liquipedia/rankings';
+import { loadRankings, membersOf, type Board, type Rankings } from '@/data/liquipedia/rankings';
 import { loadRoster, type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
 import { loadTeammates, type Teammates } from '@/data/liquipedia/teammates';
 import type { Socials } from '@/data/socials';
 import { pickDaily as careerPath } from '@/games/career-path/daily';
+import { freezeDaily as freezePairs, pickDaily as higherLower } from '@/games/higher-lower/daily';
 import { buildCriteria } from '@/games/list/criteria';
 import { pickDaily as list } from '@/games/list/daily';
-import { freezeDaily as freezeBoard, pickDaily as tenaball } from '@/games/tenaball/daily';
+import { dailyBoards, freezeDaily as freezeBoard, pickDaily as tenaball } from '@/games/tenaball/daily';
 import { pickDaily as ticTacToe } from '@/games/tic-tac-toe/daily';
 import { pickDaily as whoAreYa } from '@/games/who-are-ya/daily';
 import { pickDaily as wordle } from '@/games/wordle/daily';
 import { makeRng } from '@/lib/rng';
 import { DAILY_START, daysBetween } from './day';
 import { knownPlayers } from './fame';
-import { LIVE_DAILY, type DailyContext, type DailyGame, type DailyPuzzles, type DailySet } from './types';
+import { gamesOn, type DailyContext, type DailyGame, type DailyPuzzles, type DailySet } from './types';
 
 /**
  * Makes a day's puzzles.
@@ -63,22 +64,72 @@ export const DAILY_MIX: Readonly<Record<'easy' | 'medium', number>> = { easy: 0.
  */
 const SECRET_REST = [Infinity, 180, 60, 14, 0];
 
-/** The games whose puzzle is one secret player — no two the same player on one day. */
-const SECRET_GAMES: DailyGame[] = ['wordle', 'career-path', 'who-are-ya'];
+/** The games whose puzzle is one secret player. */
+export const SECRET_GAMES: readonly DailyGame[] = ['wordle', 'career-path', 'who-are-ya'];
+
+/** Every board a daily can name, by id, built once per data object. */
+const boardsCache = new WeakMap<DailyData, Map<string, Board>>();
+
+function boardsOf(data: DailyData): Map<string, Board> {
+  let found = boardsCache.get(data);
+  if (!found) {
+    const boards = dailyBoards(data.rankings, data.roster, data.socials ?? null, data.majors, data.facts);
+    found = new Map(boards.map((board) => [board.id, board]));
+    boardsCache.set(data, found);
+  }
+  return found;
+}
+
+/**
+ * The players a puzzle puts in front of people, by id: a secret, the names on
+ * a Tenite board about players, the players of Higher or Lower's pairs. No
+ * other game may use them the same day. A board of countries or organisations
+ * has none; neither has a grid or a list, which are not dailies now.
+ */
+export function playersIn(game: DailyGame, puzzle: unknown, data: DailyData): string[] {
+  if (!puzzle || typeof puzzle !== 'object') return [];
+  const value = puzzle as { secret?: string; players?: string[]; board?: string; frozen?: unknown };
+  if (game === 'higher-lower') return value.players ?? [];
+  if (game === 'tenaball') {
+    const board = (value.frozen as Board | undefined) ?? boardsOf(data).get(value.board ?? '');
+    return board ? boardPlayers(board) : [];
+  }
+  return value.secret ? [value.secret] : [];
+}
+
+/** The players a board names: none on a board of countries, organisations or events. */
+export function boardPlayers(board: Board): string[] {
+  return board.entity === 'player' ? board.rows.flatMap((row) => membersOf(row).map((member) => member.key)) : [];
+}
+
+/**
+ * Every player a day's puzzles use, but those of `except` — and of any game
+ * not served that day, like a daily taken back to unlimited, whose puzzle
+ * nobody sees.
+ */
+export function takenOn(set: DailySet, data: DailyData, except?: DailyGame): Set<string> {
+  return new Set(servedIn(set).filter((game) => game !== except).flatMap((game) => playersIn(game, set.puzzles[game], data)));
+}
+
+/** The games a day has a puzzle for that are served that day. */
+export function servedIn(set: DailySet): DailyGame[] {
+  return gamesOn(set.day).filter((game) => set.puzzles[game]);
+}
 
 /**
  * Everything a picker draws with, for one day.
  *
  * `others` are the days around it, before or after — a schedule made ahead
  * (the editor on /analytics/daily) has days after this one, and a puzzle should
- * not repeat on either side. `taken` is the secret players already dealt this
- * day. `salt` makes a different draw for the same day, for the editor's "New".
+ * not repeat on either side. `taken` is every player already in a game that
+ * day; a picker adds nothing to it, `generateDaily` does. `salt` makes a
+ * different draw for the same day, for the editor's "New".
  */
 export function dailyContext(
   day: string,
   data: DailyData,
   others: readonly DailySet[],
-  taken: Set<string> = new Set(),
+  taken: ReadonlySet<string> = new Set(),
   salt = '',
 ): DailyContext {
   const around = others
@@ -90,6 +141,7 @@ export function dailyContext(
     day,
     seed,
     rng: (purpose) => makeRng(seed(purpose)),
+    taken,
     recent: <G extends DailyGame>(game: G) =>
       around.flatMap(({ daysAgo, puzzles }) => {
         const puzzle = puzzles[game];
@@ -119,7 +171,6 @@ export function dailyContext(
         let roll = rng() * tiers.reduce((sum, t) => sum + DAILY_MIX[t.tier], 0);
         const chosen = tiers.find((t) => (roll -= DAILY_MIX[t.tier]) < 0) ?? tiers[tiers.length - 1];
         const secret: RosterPlayer = chosen.players[Math.floor(rng() * chosen.players.length)];
-        taken.add(secret.id);
         return secret;
       }
       return null;
@@ -139,6 +190,7 @@ export function pickPuzzle<G extends DailyGame>(game: G, data: DailyData, ctx: D
     tenaball: () => tenaball(roster, rankings, socials, majors, ctx, facts),
     list: () => list(roster, buildCriteria(roster, facts, null, orgs, teammates, socials), ctx),
     'tic-tac-toe': () => ticTacToe(roster, facts, orgs, socials, ctx),
+    'higher-lower': () => higherLower(roster, ctx),
   };
   return made[game]() as DailyPuzzles[G] | null;
 }
@@ -153,42 +205,66 @@ function aroundDay(day: string, history: readonly DailySet[]): DailySet[] {
 }
 
 /**
- * `games` is the dailies being served: a game played unlimited for now gets no
- * puzzle, so it uses up no board or player nobody plays. `check:games` passes
- * every built one, to keep them all tested.
+ * `games` is the dailies being served that day: a game played unlimited for
+ * now, or one whose daily had not started yet (`DAILY_FROM`), gets no puzzle,
+ * so it uses up no board or player nobody plays. `check:games` passes every
+ * built one, to keep them all tested.
+ *
+ * `kept` is the day as the store already has it: its puzzles stay as they are,
+ * and only the games it lacks are made, clear of every player it uses — how a
+ * daily that starts later gets its first days filled in.
  */
 export function generateDaily(
   day: string,
   data: DailyData,
   history: readonly DailySet[],
-  games: readonly DailyGame[] = LIVE_DAILY,
+  games: readonly DailyGame[] = gamesOn(day),
+  kept?: DailySet,
 ): DailySet {
-  const ctx = dailyContext(day, data, aroundDay(day, history));
-  const puzzles: Partial<DailyPuzzles> = {};
+  const puzzles: Partial<DailyPuzzles> = { ...kept?.puzzles };
+  const taken = kept ? takenOn(kept, data) : new Set<string>();
+  const ctx = dailyContext(day, data, aroundDay(day, history), taken);
   // Each on its own: a game whose data is missing is left out, not the whole day.
   for (const game of games) {
+    if (puzzles[game]) continue;
     try {
       const puzzle = pickPuzzle(game, data, ctx);
-      if (puzzle) (puzzles as Record<string, unknown>)[game] = puzzle;
+      if (!puzzle) continue;
+      (puzzles as Record<string, unknown>)[game] = puzzle;
+      for (const id of playersIn(game, puzzle, data)) taken.add(id);
     } catch (error) {
       console.error(`daily ${day}: ${game} failed`, error);
     }
   }
-  return { day, puzzles };
+  return kept ? { ...kept, puzzles } : { day, puzzles };
+}
+
+/** The games served on `set`'s day that it has no puzzle for yet. */
+export function missingFrom(set: DailySet): DailyGame[] {
+  return gamesOn(set.day).filter((game) => !set.puzzles[game]);
 }
 
 /**
- * Pins a day's Tenite board to the data it is being played on: the server
- * calls this the first time it serves a day on or after its date, and keeps
- * what it returns. Null when there is nothing new to keep.
+ * Pins a day's Tenite board and Higher or Lower's numbers to the data they are
+ * played on: the server calls this the first time it serves a day on or after
+ * its date, and keeps what it returns. Null when there is nothing new to keep.
  *
- * Only Tenite is pinned; the other dailies are rebuilt from their descriptor
- * (a player, or rule ids), which is enough while they are not served. List
- * and Tic Tac Toe would want the same before they are a daily again.
+ * The other dailies are rebuilt from their descriptor — a player and the clues
+ * in order — which a data update cannot change. List and Tic Tac Toe would want
+ * pinning before they are a daily again.
  */
 export function freezeDay(set: DailySet, data: DailyData, today: string): DailySet | null {
-  const puzzle = set.puzzles.tenaball;
-  if (!puzzle) return null;
-  const frozen = freezeBoard(puzzle, data.rankings, data.roster, data.socials ?? null, data.majors, today, data.facts);
-  return frozen ? { ...set, puzzles: { ...set.puzzles, tenaball: frozen } } : null;
+  const { tenaball: board, 'higher-lower': pairs } = set.puzzles;
+  const frozenBoard =
+    board && freezeBoard(board, data.rankings, data.roster, data.socials ?? null, data.majors, today, data.facts);
+  const frozenPairs = pairs && freezePairs(pairs, data.roster);
+  if (!frozenBoard && !frozenPairs) return null;
+  return {
+    ...set,
+    puzzles: {
+      ...set.puzzles,
+      ...(frozenBoard ? { tenaball: frozenBoard } : {}),
+      ...(frozenPairs ? { 'higher-lower': frozenPairs } : {}),
+    },
+  };
 }

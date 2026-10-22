@@ -101,10 +101,17 @@ export const GAMES: GameMeta[] = [
         'Is the next competitive Fortnite player higher or lower? Compare pros on career earnings, FNCS wins and age, and keep your streak alive.',
     },
     icon: '📈',
-    intro: [
-      'Is the player on the right higher or lower than the one on the left, in your category?',
-      'A right answer scores a point and brings in a new player. One wrong answer ends the run.',
-    ],
+    intro: ['Is the player on the right higher or lower than the one on the left, in your category?'],
+    rules: ['A right answer scores a point and brings in a new player. One wrong answer ends the run.'],
+    // Ten fixed pairs a day since 22 Oct 2026 (`higher-lower/daily.ts`): every pair is played.
+    daily: {
+      rules: [
+        'Ten pairs, the same for everyone, in one category: Age, Career Earnings or FNCS Wins.',
+        'The player you just revealed stays on as the one to beat.',
+        'Every pair is played: a wrong answer turns red and the next pair comes. Your score is how many of the ten you got right.',
+        'It starts with famous players far apart and gets closer.',
+      ],
+    },
     sections: [
       {
         title: 'Categories',
@@ -116,6 +123,7 @@ export const GAMES: GameMeta[] = [
       },
       {
         title: 'Difficulty',
+        practiceOnly: true,
         items: [
           'A run starts with famous players far apart, then gets less known and closer. Easy ramps up slowly, Medium faster, Hard fastest.',
         ],

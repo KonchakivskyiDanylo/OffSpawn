@@ -15,8 +15,8 @@ import {
   type RoundRecord,
   type SupportRequest,
 } from '@/analytics/types';
-import { addDays, DAILY_START, dayKey, isDayKey, puzzleNumber } from '@/daily/day';
-import { DAILY_GAMES, unfrozen, unpinned, type DailyGame, type DailySet } from '@/daily/types';
+import { addDays, DAILY_START, dayKey, isDayKey } from '@/daily/day';
+import { DAILY_FROM, DAILY_GAMES, gamesOn, unfrozen, unpinned, type DailyGame, type DailySet } from '@/daily/types';
 import { Socials } from '@/data/socials';
 import { movedPath } from '@/games/moved';
 import { SITE_HOST, SITE_URL } from '@/lib/site';
@@ -202,16 +202,42 @@ async function dailyEnv() {
   return { generate, data };
 }
 
+/**
+ * Games a kept day was asked to fill in, once per process: one whose data
+ * cannot make its puzzle that day is not tried again on every request.
+ */
+const filling = new Set<string>();
+
+/** The games a kept day has no puzzle for yet and that have not been tried here. */
+const toFill = (set: DailySet) => gamesOn(set.day).filter((game) => !set.puzzles[game] && !filling.has(`${set.day}:${game}`));
+
 async function dailySet(day: string): Promise<DailySet> {
   const kept = await store.daily(day);
   // A day not reached yet stays a descriptor; from its date on, its board is pinned.
-  if (kept && (day > dayKey() || !unfrozen(kept))) return kept;
+  if (kept && (day > dayKey() || !unfrozen(kept)) && toFill(kept).length === 0) return kept;
   if (!making.has(day)) {
     const made = (async () => {
       const { generate, data } = await dailyEnv();
       // Both sides: the schedule editor makes days ahead, and a day steers clear of those too.
       const history = await store.dailies(addDays(day, -DAILY_HISTORY));
-      const set = kept ?? (await store.addDaily(generate.generateDaily(day, data, history)));
+      // A day first made after it was over was never served on its day: all of it is `late`.
+      const fresh = (made: DailySet): DailySet =>
+        day < dayKey() ? { ...made, late: Object.keys(made.puzzles) as DailyGame[] } : made;
+      let set = kept ?? (await store.addDaily(fresh(generate.generateDaily(day, data, history))));
+      // A daily that starts later than the day was made gets its puzzle added,
+      // clear of every player the day already uses (`DAILY_FROM`). Added after
+      // the day is over, it is marked `late`: only the archive has offered it,
+      // so the schedule editor may still change it.
+      const missing = toFill(set);
+      if (missing.length) {
+        for (const game of missing) filling.add(`${day}:${game}`);
+        const filled = generate.generateDaily(day, data, history, missing, set);
+        const added = missing.filter((game) => filled.puzzles[game]);
+        if (added.length) {
+          set = day < dayKey() ? { ...filled, late: [...new Set([...(filled.late ?? []), ...added])] } : filled;
+          await store.setDaily(set);
+        }
+      }
       if (day > dayKey()) return set;
       // Pinned on the data of the first request on or after the day: a data
       // update later changes the boards to come, never this one.
@@ -247,8 +273,12 @@ async function schedule(days: number) {
   const from = firstEditable();
   const shownFrom = dayKey() < DAILY_START ? DAILY_START : addDays(dayKey(), -7);
   const last = addDays(from, days - 1);
-  // Made in order, so each new day sees the ones before it.
-  for (let day = from; day <= last; day = addDays(day, 1)) await dailySet(day);
+  // Made in order, so each new day sees the ones before it. The week before
+  // today too, where it was kept: a daily that started late has its first
+  // days filled in there. A past day nobody asked for is not made up here.
+  for (let day = shownFrom; day <= last; day = addDays(day, 1)) {
+    if (day >= from || (await store.daily(day))) await dailySet(day);
+  }
   const all = await store.dailies(addDays(shownFrom, -60));
   const sets = all.filter((set) => set.day >= shownFrom && set.day <= last);
   const { data } = await dailyEnv();
@@ -257,21 +287,25 @@ async function schedule(days: number) {
     today: dayKey(),
     start: DAILY_START,
     firstEditable: from,
-    rows: admin
-      .rowsFor(sets, all, data)
-      .map((row) => ({ ...row, number: puzzleNumber(row.day), editable: row.day >= from })),
+    rows: admin.rowsFor(sets, all, data, from),
   };
 }
 
-async function editDay(day: string, change: (set: DailySet, others: DailySet[]) => DailySet | null): Promise<void> {
-  if (!isDayKey(day) || day < firstEditable()) throw new HttpError(400, 'That day can no longer change');
-  await serially(async () => {
-    const set = await dailySet(day);
-    const others = (await store.dailies(addDays(day, -DAILY_HISTORY))).filter((other) => other.day !== day);
-    const next = change(set, others);
-    if (!next) throw new HttpError(422, 'Could not make that puzzle');
-    await store.setDaily(next);
-  });
+/** The days around `day` that a change steers clear of, `day` itself left out. */
+async function othersThan(...days: string[]): Promise<DailySet[]> {
+  const first = [...days].sort()[0];
+  return (await store.dailies(addDays(first, -DAILY_HISTORY))).filter((other) => !days.includes(other.day));
+}
+
+/** A day the schedule editor is told it cannot change for this game. */
+function mustEdit(admin: typeof import('@/daily/admin'), set: DailySet, game: DailyGame): void {
+  if (!admin.canEdit(set, game, firstEditable())) throw new HttpError(400, 'That day can no longer change');
+}
+
+/** What the editor shows after a change: which other puzzles were drawn again to keep players apart. */
+function redrawNote(redrawn: { day: string; games: DailyGame[] }[]): { note?: string } {
+  const lines = redrawn.filter((entry) => entry.games.length).map((entry) => `${entry.day}: ${entry.games.join(', ')}`);
+  return lines.length ? { note: `Drawn again so nobody is in two games on one day — ${lines.join('; ')}.` } : {};
 }
 
 // ------------------------------------------------------------------ routes --
@@ -462,11 +496,16 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
   if (route === 'GET /api/admin/daily/options') {
     const game = String(url.searchParams.get('game'));
     if (!DAILY_GAMES.includes(game as DailyGame)) throw new HttpError(400, 'No such game');
+    const day = url.searchParams.get('day');
     const { data } = await dailyEnv();
     // Every day kept, so a board or a list says where it has already been used.
     const sets = await store.dailies(addDays(dayKey(), -DAILY_HISTORY));
-    return send(res, 200, (await import('@/daily/admin')).optionsFor(game as DailyGame, data, sets, firstEditable()));
+    // With the day, each option says if a player of it is already in another game then.
+    const set = isDayKey(day) ? await dailySet(day) : undefined;
+    return send(res, 200, (await import('@/daily/admin')).optionsFor(game as DailyGame, data, sets, firstEditable(), set));
   }
+  // Every change keeps nobody in two games on one day (`settle`): a clash with
+  // Higher or Lower's pairs draws them again, any other clash is refused.
   const dailyEdit = /^POST \/api\/admin\/daily\/(swap|choose|redraw)$/.exec(route);
   if (dailyEdit) {
     const body = await readJson(req, 2_048);
@@ -474,50 +513,66 @@ async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise
     const game = body.game as DailyGame;
     const admin = await import('@/daily/admin');
     const { data } = await dailyEnv();
+    /** `puzzle` onto `set`, settled, or the reason it cannot go there. */
+    const settled = (puzzle: unknown, set: DailySet, others: DailySet[]) => {
+      if (!puzzle) throw new HttpError(422, 'Could not make that puzzle');
+      const out = admin.settle(game, puzzle as never, set, others, data, firstEditable());
+      if ('error' in out) throw new HttpError(409, `${set.day}: ${out.error}`);
+      return out;
+    };
     if (dailyEdit[1] === 'swap') {
       const [a, b] = [String(body.a), String(body.b)];
-      if (!isDayKey(a) || !isDayKey(b) || a < firstEditable() || b < firstEditable()) {
-        throw new HttpError(400, 'Only today and the days after it can change');
-      }
-      await serially(async () => {
+      if (!isDayKey(a) || !isDayKey(b)) throw new HttpError(400, 'Not a day');
+      const note = await serially(async () => {
         const [first, second] = [await dailySet(a), await dailySet(b)];
+        mustEdit(admin, first, game);
+        mustEdit(admin, second, game);
+        const others = await othersThan(a, b);
         // Today's board is pinned; moved to another day, it is pinned again there.
-        const take = (set: DailySet, from: DailySet): DailySet => ({
-          ...set,
-          puzzles: { ...set.puzzles, [game]: unpinned(from.puzzles[game]) },
-        });
-        await store.setDaily(take(first, second));
-        await store.setDaily(take(second, first));
+        const one = settled(unpinned(second.puzzles[game]), first, [second, ...others]);
+        const two = settled(unpinned(first.puzzles[game]), second, [one.set, ...others]);
+        await store.setDaily(one.set);
+        await store.setDaily(two.set);
+        return redrawNote([
+          { day: a, games: one.redrawn },
+          { day: b, games: two.redrawn },
+        ]);
       });
-      return send(res, 204);
+      return send(res, 200, note);
     }
     const day = String(body.day);
+    if (!isDayKey(day)) throw new HttpError(400, 'Not a day');
     if (dailyEdit[1] === 'redraw') {
-      await editDay(day, (set, others) => {
-        const puzzle = admin.redraw(game, set, others, data);
-        return puzzle ? { ...set, puzzles: { ...set.puzzles, [game]: puzzle } } : null;
+      const note = await serially(async () => {
+        const set = await dailySet(day);
+        mustEdit(admin, set, game);
+        const others = await othersThan(day);
+        const out = settled(admin.redraw(game, set, others, data), set, others);
+        await store.setDaily(out.set);
+        return redrawNote([{ day, games: out.redrawn }]);
       });
-      return send(res, 204);
+      return send(res, 200, note);
     }
     // Choose. A board already played with the same top 10 is refused; one on a
     // coming day moves here, and that day takes this day's board in its place.
-    if (!isDayKey(day) || day < firstEditable()) throw new HttpError(400, 'That day can no longer change');
-    await serially(async () => {
+    const note = await serially(async () => {
       const set = await dailySet(day);
-      const others = (await store.dailies(addDays(day, -DAILY_HISTORY))).filter((other) => other.day !== day);
+      mustEdit(admin, set, game);
+      const others = await othersThan(day);
       const { past, coming } = admin.sameElsewhere(game, String(body.id), others, data, firstEditable());
       if (past.length) {
         throw new HttpError(409, `Already played on ${past.join(', ')}, and its answers have not changed since.`);
       }
-      const puzzle = admin.puzzleForChoice(game, String(body.id), day, data);
-      if (!puzzle) throw new HttpError(422, 'Could not make that puzzle');
-      for (const from of coming) {
+      const here = settled(admin.puzzleForChoice(game, String(body.id), set, others, data), set, others);
+      const moved = coming.map((from) => {
         const other = others.find((candidate) => candidate.day === from)!;
-        await store.setDaily({ ...other, puzzles: { ...other.puzzles, [game]: unpinned(set.puzzles[game]) } });
-      }
-      await store.setDaily({ ...set, puzzles: { ...set.puzzles, [game]: puzzle } });
+        return { day: from, ...settled(unpinned(set.puzzles[game]), other, [here.set, ...others]) };
+      });
+      for (const entry of moved) await store.setDaily(entry.set);
+      await store.setDaily(here.set);
+      return redrawNote([{ day, games: here.redrawn }, ...moved.map((entry) => ({ day: entry.day, games: entry.redrawn }))]);
     });
-    return send(res, 204);
+    return send(res, 200, note);
   }
 
   // The follower counts: how fresh they are, the one-time Twitch login, a refresh now.
@@ -705,9 +760,15 @@ createServer(async (req, res) => {
 }).listen(PORT, () => {
   const dashboard = OPEN ? 'open (ADMIN_OPEN, local only)' : ADMIN_PASSWORD ? 'on' : 'off (no ADMIN_PASSWORD)';
   console.log(`OffSpawn on :${PORT} — ${process.env.DATABASE_URL ? 'Postgres' : 'file store'}, dashboard ${dashboard}`);
-  // Today's puzzles made now rather than on the first visitor's request.
+  // Today's puzzles made now rather than on the first visitor's request — and,
+  // in order, every day before it since the dailies began, so a daily that
+  // starts in the past has its archive filled in day by day (`DAILY_FROM`). A
+  // day already whole is one read of the store.
   if (SECURE && dayKey() >= DAILY_START) {
-    void dailySet(dayKey()).catch((error) => console.error('daily puzzles:', error));
+    void (async () => {
+      const first = gamesOn(dayKey()).map((game) => DAILY_FROM[game]).sort()[0] ?? dayKey();
+      for (let day = first; day <= dayKey(); day = addDays(day, 1)) await dailySet(day);
+    })().catch((error) => console.error('daily puzzles:', error));
   }
   // The follower counts, kept fresh — nothing happens without the API keys.
   scheduleSocials(store);

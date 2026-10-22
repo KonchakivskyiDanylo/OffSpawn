@@ -35,7 +35,10 @@ const MODE_WORD: Record<string, string> = { Solo: 'solos', Duo: 'duos', Trio: 't
  */
 export const EVERY_POOL_MIN = 20;
 
-const TIE = 'Level averages are split by career earnings, the bigger earner higher.';
+/** Level averages go to who reached higher at one Globals (22 Oct 2026), and only then the money. */
+const TIE = 'Level averages go to the better best finish at a Globals, then to the bigger career earner.';
+/** On the worst board the other way round: the worse best finish ranks as worse. */
+const TIE_WORST = 'Level averages go to the worse best finish at a Globals, then to the bigger career earner.';
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 const word = (n: number) => WORDS[n] ?? String(n);
 
@@ -79,6 +82,8 @@ export function globalsBoards(majors: Majors, roster: Roster): Board[] {
   const finishes = finishesBy(majors, events);
   const byId = new Map(roster.players.map((player) => [player.id, player]));
   const out: Board[] = [];
+  /** A player's best finish at any Globals. */
+  const peak = (id: string) => Math.min(...(finishes.get(id)?.values() ?? []));
 
   /**
    * Ranks the averages and makes the board. A player the roster cannot name in
@@ -93,7 +98,8 @@ export function globalsBoards(majors: Majors, roster: Roster): Board[] {
         label: player?.name ?? '',
         value,
         display: average(value),
-        tiebreak: player?.earnings ?? -1,
+        // The best finish, negated where better ranks higher: 1st beats 3rd.
+        tiebreak: [worstFirst ? peak(key) : -peak(key), player?.earnings ?? -1],
       };
     });
     const sorted = byValue(ranked, !worstFirst);
@@ -159,7 +165,7 @@ export function globalsBoards(majors: Majors, roster: Roster): Board[] {
       allOf
         ? `Top 10 worst average Globals finish — played all ${word(n)}`
         : `Top 10 worst average Globals finish — ${word(n - 1)} or more of ${word(n)} played`,
-      `The ${pool.length} players at ${allOf ? `every Global Championship, ${years}` : `${word(n - 1)} or more of the ${word(n)} Global Championships (${years})`}, ranked by their average finish there, worst first. ${TIE}`,
+      `The ${pool.length} players at ${allOf ? `every Global Championship, ${years}` : `${word(n - 1)} or more of the ${word(n)} Global Championships (${years})`}, ranked by their average finish there, worst first. ${TIE_WORST}`,
       worst,
       true,
     );

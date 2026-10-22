@@ -1,8 +1,8 @@
-import type { Facts } from '@/data/liquipedia/facts';
+import { isRegionalFinal, type Facts, type HeadlineEvent } from '@/data/liquipedia/facts';
 import type { Board, BoardRow } from '@/data/liquipedia/rankings';
 import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
 import { monthYear } from '@/lib/format';
-import { board, byValue, NEEDED, SLOTS, TIE_EARNINGS, type Ranked } from './board-builder';
+import { board, byValue, NEEDED, SLOTS, tieText, type Ranked } from './board-builder';
 
 /**
  * Who won the FNCS and the Div Cups, and when, as Tenite boards (the user,
@@ -215,20 +215,24 @@ export function winnerBoards(facts: Facts, roster: Roster): Board[] {
 
     // Most wins. A win the roster cannot fully name gives someone it cannot see
     // a win, so the board waits until the 11th has more than those could add up to.
+    // Level ones go to the podiums in this region's finals first (22 Oct 2026):
+    // NA East has twenty players on one win at 10th.
     const counts = new Map<string, number>();
     for (const win of here) for (const id of win.players) counts.set(id, (counts.get(id) ?? 0) + 1);
+    const inRegion = (event: HeadlineEvent) => isRegionalFinal(event) && fncsRegion(event) === region;
     const ranked = byValue(
       [...counts].map(([key, value]) => ({
         key,
         label: byId.get(key)!.name,
         value,
         display: `${value} win${value === 1 ? '' : 's'}`,
-        tiebreak: byId.get(key)!.earnings,
+        tiebreak: [facts.podiumsAt(key, inRegion), byId.get(key)!.earnings],
       })),
     );
     const hidden = here.filter((win) => !win.complete).length;
     if (ranked.length >= NEEDED && ranked[SLOTS].value > hidden) {
-      push(board(`fncs-most:${region}`, FNCS_WINNERS_GROUP, `Top 10 by ${name} wins`, 'player', TIE_EARNINGS, ranked));
+      const tie = tieText(`more podiums (top 3) in ${name} finals`);
+      push(board(`fncs-most:${region}`, FNCS_WINNERS_GROUP, `Top 10 by ${name} wins`, 'player', tie, ranked));
     }
 
     const first = firstOrLast(here, false, byId);

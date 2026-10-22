@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { dayKey, isDayKey, msUntilNextDay, puzzleDay, puzzleNumber } from './day';
+import type { DailyGame } from './types';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -8,17 +9,18 @@ const pad = (n: number) => String(n).padStart(2, '0');
  * The archive: an earlier day's puzzle, from `?puzzle=N` on a daily game's
  * page (the user, 8 Oct 2026: play previous days, but only ones not played
  * before in this browser — a played one shows its result, never a new round).
- * Only a day from #1 to yesterday; anything else is today's.
+ * Only a day from #1 to yesterday; anything else is today's. N counts from the
+ * game's own first day (`DAILY_FROM`).
  */
 export const PUZZLE_PARAM = 'puzzle';
 
 /** The day a daily game's page is on: today's, or an earlier one from the archive. */
-export function usePuzzleDay(): { day: string; today: string; past: boolean } {
+export function usePuzzleDay(game?: DailyGame): { day: string; today: string; past: boolean } {
   const today = useToday();
   const [params] = useSearchParams();
   const asked = Number(params.get(PUZZLE_PARAM));
-  const past = Number.isInteger(asked) && asked >= 1 && asked < puzzleNumber(today);
-  return { day: past ? puzzleDay(asked) : today, today, past };
+  const past = Number.isInteger(asked) && asked >= 1 && asked < puzzleNumber(today, game);
+  return { day: past ? puzzleDay(asked, game) : today, today, past };
 }
 
 /**

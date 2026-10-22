@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { gameStats, logKey, useDailyLog, type DailyLog } from '@/daily/progress';
-import { LIVE_DAILY, type DailyGame, type DailyResult } from '@/daily/types';
+import { gamesOn, type DailyGame, type DailyResult } from '@/daily/types';
 import { puzzleHref, useCountdown, usePuzzleDay } from '@/daily/useDay';
 import type { DailyStatus } from '@/daily/useDailyRound';
 import { puzzleLabel, puzzleNumber, shortDate } from '@/daily/day';
@@ -112,7 +112,7 @@ export function DailyEnd({
 
       {past && !log[today] ? (
         <Link to={puzzleHref(meta.slug)} className="btn btn--primary btn--block">
-          Play today’s puzzle {puzzleLabel(puzzleNumber(today))}
+          Play today’s puzzle {puzzleLabel(puzzleNumber(today, game))}
         </Link>
       ) : (
         <p className="daily-end__next">
@@ -143,8 +143,8 @@ export function DailyPending({
   game?: DailyGame;
   played?: DailyResult | null;
 }) {
-  const { day, today, past } = usePuzzleDay();
-  const which = past ? `Puzzle ${puzzleLabel(puzzleNumber(day))}` : 'Today’s puzzle';
+  const { day, today, past } = usePuzzleDay(game);
+  const which = past ? `Puzzle ${puzzleLabel(puzzleNumber(day, game))}` : 'Today’s puzzle';
   if (status === 'error') {
     return (
       <section className="card stack-sm center">
@@ -179,14 +179,14 @@ export function DailyPending({
         </div>
         {past && !readLocal<DailyLog>(logKey(game), {})[today] ? (
           <Link to={puzzleHref(meta.slug)} className="btn btn--primary btn--block">
-            Play today’s puzzle {puzzleLabel(puzzleNumber(today))}
+            Play today’s puzzle {puzzleLabel(puzzleNumber(today, game))}
           </Link>
         ) : null}
         <MissedPuzzles game={game} />
       </section>
     );
   }
-  return <div className="page center muted">Loading {past ? `puzzle ${puzzleLabel(puzzleNumber(day))}` : 'today’s puzzle'}…</div>;
+  return <div className="page center muted">Loading {past ? `puzzle ${puzzleLabel(puzzleNumber(day, game))}` : 'today’s puzzle'}…</div>;
 }
 
 function DailyStat({ label, value }: { label: string; value: string | number }) {
@@ -200,7 +200,7 @@ function DailyStat({ label, value }: { label: string; value: string | number }) 
 
 /** The other dailies, ticked when done today — the way on to the next one. */
 function MoreDailies({ current, day }: { current: DailyGame; day: string }) {
-  const others = LIVE_DAILY.filter((game) => game !== current && !getGame(game)?.hidden);
+  const others = gamesOn(day).filter((game) => game !== current && !getGame(game)?.hidden);
   if (others.length === 0) return null;
   return (
     <div className="stack-sm">

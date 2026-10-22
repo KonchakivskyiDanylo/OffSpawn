@@ -4,7 +4,7 @@ import { useLocalState } from '@/lib/storage';
 import { useDailySet } from './client';
 import { DAILY_START, puzzleNumber } from './day';
 import { logResult, readLog, savedRound, saveRound } from './progress';
-import { isLiveDaily, type DailyGame, type DailyPuzzles, type DailyResult } from './types';
+import { DAILY_FROM, isLiveDaily, type DailyGame, type DailyPuzzles, type DailyResult } from './types';
 import { usePuzzleDay, useToday } from './useDay';
 
 /**
@@ -27,7 +27,7 @@ export function usePlayMode(game?: DailyGame): [daily: boolean, setDaily: (daily
   const [mode, setMode] = useLocalState<'daily' | 'practice'>('dev:play-mode', 'daily');
   const today = useToday();
   const set = useCallback((daily: boolean) => setMode(daily ? 'daily' : 'practice'), [setMode]);
-  const on = DEV_TOGGLE ? mode === 'daily' : today >= DAILY_START;
+  const on = DEV_TOGGLE ? mode === 'daily' : today >= (game ? DAILY_FROM[game] : DAILY_START);
   return [on && (game === undefined || isLiveDaily(game)), set];
 }
 
@@ -83,7 +83,7 @@ export function useDailyRound<G extends DailyGame, S, Snap>(
     result: (state: S) => DailyResult;
   },
 ): DailyRound<S> {
-  const { day, past } = usePuzzleDay();
+  const { day, past } = usePuzzleDay(game);
   const { set, error } = useDailySet(options.on ? day : null);
   const [round, setRound] = useState<{
     day: string;
@@ -143,7 +143,7 @@ export function useDailyRound<G extends DailyGame, S, Snap>(
     status,
     error,
     day,
-    number: puzzleNumber(day),
+    number: puzzleNumber(day, game),
     past,
     played: current?.played ?? null,
     answers: current?.answers ?? null,

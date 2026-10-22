@@ -19,10 +19,10 @@ import { Modal } from './ui';
  * streak (`gameStats`).
  */
 
-/** Puzzle numbers before today's, newest first. */
-export function pastNumbers(today: string): number[] {
+/** A game's puzzle numbers before today's, newest first. */
+export function pastNumbers(today: string, game: DailyGame): number[] {
   const out: number[] = [];
-  for (let number = puzzleNumber(today) - 1; number >= 1; number--) out.push(number);
+  for (let number = puzzleNumber(today, game) - 1; number >= 1; number--) out.push(number);
   return out;
 }
 
@@ -31,13 +31,13 @@ const won = (outcome: string) => outcome === 'won' || outcome === 'cleared';
 /** One game's earlier puzzles, newest first: Play, Continue, or the result. */
 function PastList({ game, onPick }: { game: DailyGame; onPick?: () => void }) {
   const meta = getGame(game)!;
-  const { day: current, today } = usePuzzleDay();
+  const { day: current, today } = usePuzzleDay(game);
   const [log] = useLocalState<DailyLog>(logKey(game), {});
   const begun = savedDays(game);
   return (
     <div className="past-list">
-      {pastNumbers(today).map((number) => {
-        const day = puzzleDay(number);
+      {pastNumbers(today, game).map((number) => {
+        const day = puzzleDay(number, game);
         const done = log[day];
         return (
           <Link
@@ -77,7 +77,7 @@ export function PastPuzzlesButton({
 }) {
   const { today } = usePuzzleDay();
   const [open, setOpen] = useState(false);
-  if (games.length === 0 || pastNumbers(today).length === 0) return null;
+  if (games.every((game) => pastNumbers(today, game).length === 0)) return null;
   const close = () => setOpen(false);
   return (
     <>
@@ -112,11 +112,11 @@ export function PastPuzzlesButton({
  */
 export function MissedPuzzles({ game }: { game: DailyGame }) {
   const meta = getGame(game)!;
-  const { day: current, today } = usePuzzleDay();
+  const { day: current, today } = usePuzzleDay(game);
   const [log] = useLocalState<DailyLog>(logKey(game), {});
-  const all = pastNumbers(today);
+  const all = pastNumbers(today, game);
   const missed = all.filter((number) => {
-    const day = puzzleDay(number);
+    const day = puzzleDay(number, game);
     return day !== current && !log[day];
   });
   if (missed.length === 0) return null;
@@ -127,7 +127,7 @@ export function MissedPuzzles({ game }: { game: DailyGame }) {
       <div className="daily-more">
         {missed.slice(0, SHOWN).map((number) => (
           <Link key={number} to={puzzleHref(meta.slug, number)} className="daily-more__item">
-            {puzzleLabel(number)} <span className="past-row__date">{shortDate(puzzleDay(number))}</span>
+            {puzzleLabel(number)} <span className="past-row__date">{shortDate(puzzleDay(number, game))}</span>
           </Link>
         ))}
         {missed.length > SHOWN ? (

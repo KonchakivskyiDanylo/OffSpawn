@@ -384,6 +384,50 @@ def build(BASE):
     # the number Liquipedia shows on the player page and the one people remember.
     career = Counter({p['pagename']: float(p['earnings'] or 0) for p in PLAYABLE})
 
+    # ------------------------------------------------------------- tiebreaks --
+    # What a level count falls to before career earnings (the user, 22 Oct 2026:
+    # "only career earnings isn't ideal ... it could change depends on the
+    # category"). Each board names its own, in the order a fan would reach for
+    # them: a count of titles goes to the player with more podiums of the same
+    # kind, a count of appearances to the better average finish at those
+    # events, and only what is still level after that to the bigger earner.
+    REGIONAL = FNCS - LANS          # the regional grand finals, the ones an "FNCS win" is
+    top3_at = defaultdict(Counter)  # kind -> page -> top-3 finishes
+    places_at = defaultdict(lambda: defaultdict(list))   # kind -> page -> places
+    for t, r, m, pages in PLACED:
+        if r is None:
+            continue
+        n = t['name']
+        kinds = [k for k, names in (('regional', REGIONAL), ('fncs', FNCS), ('major', MAJORS), ('lan', LANS))
+                 if n in names]
+        for page, _ in pages:
+            for k in kinds:
+                places_at[k][page].append(r)
+                if r <= 3:
+                    top3_at[k][page] += 1
+
+    def podiums(kind):
+        """More top-3 finishes of `kind` ranks higher."""
+        return lambda page: top3_at[kind][page]
+
+    def avg_finish(kind):
+        """The better average finish at events of `kind` ranks higher; none at all, last."""
+        return lambda page: (-sum(places_at[kind][page]) / len(places_at[kind][page])
+                             if places_at[kind][page] else float('-inf'))
+
+    def rank_by(d, *tiebreaks, label_of=None):
+        """`rank_fame` with the category's own tiebreaks before the money: each
+        one page -> number, bigger ranking higher. They ride along after the
+        value, so `board` sees a cut still level after all of them as level."""
+        label_of = label_of or NAME
+        return sorted(((k, label_of(k), v, *(f(k) for f in tiebreaks), career.get(k, 0))
+                       for k, v in d.items() if v > 0),
+                      key=lambda e: (-e[2], *(-x for x in e[3:]), e[1].lower()))
+
+    def tie_text(*steps):
+        """"Players level on titles are ranked by X, then by Y, then by career earnings." """
+        return 'Level ones go to ' + ', then to '.join(steps + ('the bigger career earner',)) + '.'
+
     board('career-earnings', 'Players', 'Top 10 by career earnings', 'player',
           TIE_MONEY, rank(career, NAME), money)
     board('lan-earnings', 'Players', 'Top 10 by major LAN earnings', 'player',
@@ -393,12 +437,16 @@ def build(BASE):
     board('earnings-no-wc', 'Players', 'Top 10 by earnings excluding the World Cup',
           'player', TIE_MONEY,
           rank(Counter({k: v - wc_earn[k] for k, v in earn.items()}), NAME), money)
-    board('lan-apps', 'Players', 'Top 10 by major LAN appearances', 'player', TIE_COUNT,
-          rank_fame(lan_apps, NAME), count('LAN'))
+    board('lan-apps', 'Players', 'Top 10 by major LAN appearances', 'player',
+          tie_text('the better average finish at those LANs'),
+          rank_by(lan_apps, avg_finish('lan')), count('LAN'))
     board('fncs-apps', 'Players', 'Top 10 by FNCS Finals appearances', 'player',
-          TIE_COUNT, rank_fame(fncs_apps, NAME), count('final'))
-    board('fncs-wins', 'Players', 'Top 10 by FNCS wins', 'player', TIE_COUNT,
-          rank_fame(Counter({p['pagename']: p['fncs_wins'] for p in PLAYABLE}), NAME),
+          tie_text('the better average finish in those finals'),
+          rank_by(fncs_apps, avg_finish('fncs')), count('final'))
+    board('fncs-wins', 'Players', 'Top 10 by FNCS wins', 'player',
+          tie_text('more FNCS podiums (top 3 in a grand final)', 'the better average FNCS finish'),
+          rank_by(Counter({p['pagename']: p['fncs_wins'] for p in PLAYABLE}),
+                  podiums('regional'), avg_finish('regional')),
           count('title'))
 
     major_wins = Counter()
@@ -407,7 +455,8 @@ def build(BASE):
             for page, _ in pages:
                 major_wins[page] += 1
     board('major-wins', 'Players', 'Top 10 by major tournament wins', 'player',
-          TIE_COUNT, rank_fame(major_wins, NAME), count('win'))
+          tie_text('more podiums at majors', 'the better average finish at majors'),
+          rank_by(major_wins, podiums('major'), avg_finish('major')), count('win'))
 
     for y in YEARS:
         board(f'year-earnings:{y}', 'Players', f'Top 10 earners in {y}', 'player',
@@ -503,14 +552,16 @@ def build(BASE):
         if finishes[n]:
             YEAR_LANS[year_of(tour_of[n])].append(n)
 
-    def average_finish(slots, home, size=None, results=None, missed=None):
+    def average_finish(slots, home, size=None, results=None, missed=None, peak=None):
         """Each entrant's average over `slots`, [(mode, events)]. A slot holds one
         finish per entrant - the best, for a player Liquipedia lists twice, like
         Astell in two duos at the 2026 Major 2 Asia final. Only entrants with a
         finish at one of the `home` events are kept. With `size` an entrant is a
         whole team of that many, with a finish only where exactly those players
         played together. `results` and `missed` default to the majors' finishes
-        and MISSED; the Div Cups pass their own and a flat 100."""
+        and MISSED; the Div Cups pass their own and a flat 100. `peak`, a dict,
+        is filled with each entrant's best single finish over the same slots -
+        what a level average goes to."""
         results = finishes if results is None else results
         miss = (lambda mode: MISSED[mode]) if missed is None else (lambda mode: missed)
         best, kept = defaultdict(dict), set()
@@ -524,6 +575,8 @@ def build(BASE):
                             best[key][i] = r
                         if n in home:
                             kept.add(key)
+        if peak is not None:
+            peak.update((key, min(best[key].values())) for key in kept)
         return {key: sum(best[key].get(i, miss(mode)) for i, (mode, _) in enumerate(slots))
                      / len(slots)
                 for key in kept}
@@ -570,15 +623,19 @@ def build(BASE):
 
     AVG_UNNAMED = []     # left out: an entrant in the top eleven the roster cannot name
 
-    def avg_board(bid, group, title, tie, avgs, size=None):
-        """Level averages fall to career earnings - a team's added up - and only
-        then to a shared 10th: with two or three rounds in a year, three players
-        level at the cut is common, and those boards were being dropped."""
+    def avg_board(bid, group, title, tie, avgs, size=None, peak=None):
+        """Level averages fall to the better best finish over the same events
+        (`peak`, from `average_finish`), then to career earnings - a team's added
+        up - and only then to a shared 10th: with two or three rounds in a year,
+        three players level at the cut is common, and those boards were being
+        dropped. The best finish first (22 Oct 2026): two players on one average
+        are told apart by who reached higher, which is the thing a fan remembers."""
         label = team_name if size else NAME
         money_of = (lambda key: sum(career.get(pg, 0) for pg in key)) if size else \
                    (lambda key: career.get(key, 0))
-        ranked = sorted(((key, label(key), v, money_of(key)) for key, v in avgs.items()),
-                        key=lambda e: (e[2], -e[3], e[1].lower()))
+        peak = peak or {}
+        ranked = sorted(((key, label(key), v, -peak.get(key, 999), money_of(key)) for key, v in avgs.items()),
+                        key=lambda e: (e[2], -e[3], -e[4], e[1].lower()))
         if size:
             # One team per player, their best: with two of one player's duos
             # in the eleven, naming them would answer two slots at once.
@@ -588,9 +645,9 @@ def build(BASE):
             AVG_UNNAMED.append(bid)
             return
         if size:
-            ranked = [('|'.join(key), name, v, money) for key, name, v, money in ranked]
-        tie += (' Level averages go to the bigger combined career earnings.' if size else
-                ' Level averages go to the bigger career earner.')
+            ranked = [('|'.join(key), name, v, top, money) for key, name, v, top, money in ranked]
+        tie += (' Level averages go to the better best finish, then to the bigger combined career earnings.'
+                if size else ' Level averages go to the better best finish, then to the bigger career earner.')
         board(bid, group, title, 'player', tie, ranked, average, lower=True,
               members_of=team_members if size else None)
 
@@ -636,9 +693,10 @@ def build(BASE):
                     bid = ':'.join([prefix, str(year)] + ([who] if size else [])
                                    + ([server] if server else [] if size else ['world']))
                     before = len(boards)
+                    peak = {}
                     avg_board(bid, group, title + (f' — {server}' if server else ''),
                               avg_tie(slots, lans, k, server, f'of {year}', size),
-                              average_finish(slots, home, size), size)
+                              average_finish(slots, home, size, peak=peak), size, peak)
                     avg_built[prefix] += len(boards) - before
 
     # All time: every round of FNCS finals, misses counted from 2019 for
@@ -649,10 +707,11 @@ def build(BASE):
             continue
         first = min(y for y, _, by_server in ROUNDS if not server or server in by_server)
         before = len(boards)
+        peak = {}
         avg_board(f"fncs-avg:all:{server or 'world'}", 'FNCS all time',
                   'Top 10 by average FNCS finish, all time' + (f' — {server}' if server else ''),
                   avg_tie(slots, [], k, server, f'since {first}', None),
-                  average_finish(slots, home))
+                  average_finish(slots, home, peak=peak), peak=peak)
         avg_built['all time'] += len(boards) - before
     print(f'averages: {len(ROUNDS)} rounds of FNCS finals, LANs by year '
           f'{ {y: len(ns) for y, ns in sorted(YEAR_LANS.items())} }; boards {dict(avg_built)}')
@@ -738,19 +797,21 @@ def build(BASE):
     def div_pages(weeks, server):
         return [p for w in weeks for p in _weeks[w] if not server or page_server(DIV[p]) == server]
 
-    def div_average(weeks, server, size=None):
+    def div_average(weeks, server, size=None, peak=None):
         """Average finish over `weeks`, a week missed at 100th. On a world board
         a player in two regions that week keeps the better finish."""
         slots = [(week_mode[w], div_pages([w], server)) for w in weeks]
         slots = [s for s in slots if s[1]]
         home = {p for _, pages in slots for p in pages}
-        return average_finish(slots, home, size, div_ranked, DIV_MISSED) if slots else {}
+        return average_finish(slots, home, size, div_ranked, DIV_MISSED, peak) if slots else {}
 
-    def tally_board(bid, group, title, tie, counts, tiebreak, fmt):
+    def tally_board(bid, group, title, tie, counts, tiebreak, fmt, then=None):
         """A count or a sum, level ones split by `tiebreak` - an average finish,
-        lower first, as the user asked for the Div Cups."""
-        ranked = sorted(((k, NAME(k), v, tiebreak.get(k, DIV_MISSED)) for k, v in counts.items() if v > 0),
-                        key=lambda e: (-e[2], e[3], e[1].lower()))
+        lower first, as the user asked for the Div Cups - and what is still
+        level by `then`, lower first too."""
+        ranked = sorted(((k, NAME(k), v, tiebreak.get(k, DIV_MISSED), *([then.get(k, 0)] if then else []))
+                         for k, v in counts.items() if v > 0),
+                        key=lambda e: (-e[2], *e[3:], e[1].lower()))
         if any(unnamed(e[0]) for e in ranked[:SLOTS + 1]):
             AVG_UNNAMED.append(bid)
             return
@@ -812,12 +873,13 @@ def build(BASE):
         n = len(weeks)
         for server in [None] + DIV_SERVERS:
             before = len(boards)
+            peak = {}
             avg_board(f"divcup:average:{key}:{server or 'world'}", group,
                       f'Top 10 by average Div Cup finish{scope_text}{where(server)}',
                       f'Average finish across the {n} {the(server)}Div Cup weeks{scope_text}'
                       + (', the better one for a player in two regions that week' if not server else '')
                       + '. A missed week counts as 100th.',
-                      div_average(weeks, server))
+                      div_average(weeks, server, peak=peak), peak=peak)
             div_built['averages'] += len(boards) - before
         eligible = [w for w in weeks if team_week(w)]
         if not eligible or (key in {s for s, *_ in SEASONS} and len(eligible) < n):
@@ -827,6 +889,7 @@ def build(BASE):
         size, word = TEAM_SIZE[mode], MODE_WORD[mode]
         for server in [None] + DIV_SERVERS:
             before = len(boards)
+            peak = {}
             avg_board(f"divcup:average-{word}:{key}:{server or 'world'}", group,
                       f'Top 10 {word} by average Div Cup finish{scope_text}{where(server)}',
                       f'Average finish across the {len(team_weeks)} {the(server)}{mode.lower()} Div Cup '
@@ -835,7 +898,7 @@ def build(BASE):
                       + f'. {word.title()} are ranked as one team, so a week they did not play together '
                       f'is a miss, counting as 100th. Each player counts once, with their best '
                       f'{word[:-1]}, and {"both" if size == 2 else "all three"} names fill one slot.',
-                      div_average(team_weeks, server, size), size)
+                      div_average(team_weeks, server, size, peak), size, peak)
             div_built['team averages'] += len(boards) - before
 
     # Performance Evaluations: money and lobbies reached, no averages (the
@@ -847,7 +910,10 @@ def build(BASE):
     FPE_SERVERS = [s for s in DIV_SERVERS if any(page_server(FPE[p]) == s for p in FPE_PLAYED)]
     _fpe_years = sorted((y for y, n in Counter(year_of(FPE[p]) for p in FPE_PLAYED).items() if n >= 20),
                         reverse=True)
-    TIE_FPE = 'Level ones go to the bigger career earner.'
+    # Level sessions go to the bigger Evaluation earner, level money to the
+    # player with more sessions, and only then the bigger career earner.
+    TIE_FPE_SESSIONS = 'Level ones go to more Performance Evaluation prize money, then to the bigger career earner.'
+    TIE_FPE_MONEY = 'Level ones go to more sessions played, then to the bigger career earner.'
     for key, scope_text, pages in ([('all', ', all time', FPE_PLAYED)]
                                    + [(str(y), f' in {y}', [p for p in FPE_PLAYED if year_of(FPE[p]) == y])
                                       for y in _fpe_years]):
@@ -859,28 +925,30 @@ def build(BASE):
                 quals.update(fpe_there[p])
                 prize.update(fpe_prize[p])
             fame = {k: -career.get(k, 0) for k in set(quals) | set(prize)}
+            more = lambda counts: {k: -v for k, v in counts.items()}
             before = len(boards)
             tally_board(f"fpe:sessions:{key}:{server or 'world'}", 'Performance Evaluations',
                         f'Top 10 by Performance Evaluations played{scope_text}{where(server)}',
-                        f'{the(server)}Performance Evaluation sessions played{scope_text}. {TIE_FPE}',
-                        quals, fame, count_fmt('session'))
+                        f'{the(server)}Performance Evaluation sessions played{scope_text}. {TIE_FPE_SESSIONS}',
+                        quals, more(prize), count_fmt('session'), fame)
             tally_board(f"fpe:earnings:{key}:{server or 'world'}", 'Performance Evaluations',
                         f'Top 10 by Performance Evaluation earnings{scope_text}{where(server)}',
-                        f'Prize money from {the(server)}Performance Evaluations{scope_text}. {TIE_FPE}',
-                        prize, fame, money)
+                        f'Prize money from {the(server)}Performance Evaluations{scope_text}. {TIE_FPE_MONEY}',
+                        prize, more(quals), money, fame)
             # By format, where the scope had more than one - otherwise it is
             # the board above again.
             for mode in (modes if len(modes) > 1 else []):
-                prize = Counter()
+                prize, played = Counter(), Counter()
                 for p in here:
                     if FPE[p].get('mode') == mode:
                         prize.update(fpe_prize[p])
+                        played.update(fpe_there[p])
                 tally_board(f"fpe:earnings-{MODE_WORD[mode]}:{key}:{server or 'world'}",
                             'Performance Evaluations',
                             f'Top 10 by {mode.lower()} Performance Evaluation earnings{scope_text}{where(server)}',
                             f'Prize money from {the(server)}Performance Evaluations played in '
-                            f'{MODE_WORD[mode]}{scope_text}. {TIE_FPE}',
-                            prize, fame, money)
+                            f'{MODE_WORD[mode]}{scope_text}. {TIE_FPE_MONEY}',
+                            prize, more(played), money, fame)
             div_built['evaluations'] += len(boards) - before
 
     # List's Div Cup and Evaluation lists, written into facts.json below. A
@@ -1036,18 +1104,24 @@ def build(BASE):
 
     # --------------------------------------------------------------- teammates --
     # Anchors people would actually recognise: the biggest earners.
+    # Level counts go to the partner of the bigger events: more majors - FNCS
+    # finals and the LANs - played on one team.
     mates = defaultdict(Counter)
+    mates_majors = defaultdict(Counter)
     for t, r, m, pages in PLACED:
         ids = sorted({pg for pg, _ in pages})
         if len(ids) > 1:
             for a, b in itertools.combinations(ids, 2):
                 mates[a][b] += 1; mates[b][a] += 1
+                if t['name'] in MAJORS:
+                    mates_majors[a][b] += 1; mates_majors[b][a] += 1
     anchors = [p for p, _ in career.most_common(60)]
     for a in anchors:
         board(f'teammates:{a}', 'Teammates',
               f'Top 10 most frequent teammates of {NAME(a)}', 'player',
-              'Ranked by tournaments entered together. ' + TIE_COUNT,
-              rank_fame(mates[a], NAME), count('tournament'))
+              'Ranked by tournaments entered together. '
+              + tie_text('more majors played together (FNCS finals and LANs)'),
+              rank_by(mates[a], mates_majors[a].__getitem__), count('tournament'))
 
     # ----------------------------------------------------------- one tournament --
     # Epic's LANs (the Globals, the World Cup finals, the Invitational, the Summit),
@@ -1172,10 +1246,14 @@ def build(BASE):
 
     board('country-total-earnings', 'Countries', 'Top 10 countries by player earnings',
           'country', TIE_MONEY, rank(country_total, CT), money)
+    country_winners = Counter((p.get('nationalities') or [None])[0] for p in PLAYABLE if p['fncs_wins'])
     board('country-fncs-wins', 'Countries', 'Top 10 countries by FNCS wins',
           'country', 'Every FNCS title won by a player of that nationality. Countries '
-          "level on the count are ranked by their players' total earnings.",
-          rank_fame(country_fncs, CT, country_total.get), count('title'))
+          'level on the count are ranked by how many different players won them, then '
+          "by their players' total earnings.",
+          sorted(((c, c, v, country_winners[c], country_total[c]) for c, v in country_fncs.items() if v > 0),
+                 key=lambda e: (-e[2], -e[3], -e[4], e[1].lower())),
+          count('title'))
     for y in YEARS:
         board(f'country-year-earnings:{y}', 'Countries',
               f'Top 10 countries by earnings in {y}', 'country', TIE_MONEY,
@@ -1292,6 +1370,8 @@ def build(BASE):
                and t.get('liquipediatier') in (1, 2)
                and t.get('liquipediatiertype') is None}
 
+    # Podiums for the tiebreaks (cell 2's `rank_by`): anywhere, and at these offline events.
+    top3_any, top3_offline, fncs_firsts = Counter(), Counter(), Counter()
     for t, r, m, pages in PLACED:
         n = t['name']
         for page, _ in pages:
@@ -1299,6 +1379,12 @@ def build(BASE):
                 wins_any[page] += 1
                 if n in OFFLINE:
                     wins_offline[page] += 1
+                if n in FNCS:
+                    fncs_firsts[page] += 1
+            if r is not None and r <= 3:
+                top3_any[page] += 1
+                if n in OFFLINE:
+                    top3_offline[page] += 1
             if n in FNCS:
                 fncs_apps_all[page] += 1
                 if r is not None and r <= 5:
@@ -1306,21 +1392,27 @@ def build(BASE):
 
     board('tournament-wins', 'Players', 'Top 10 by tournaments won', 'player',
           'Every tournament on record, from a Global Championship to a $50 cup - '
-          'first place only. ' + TIE_FAME, rank_fame(wins_any), count('win'))
+          'first place only. ' + tie_text('more top-3 finishes'),
+          rank_by(wins_any, top3_any.__getitem__), count('win'))
     board('lan-wins', 'Players', 'Top 10 by LAN wins', 'player',
           'Offline main events in the top two tiers, so the Globals and the World '
-          'Cup but also DreamHack, Gamers8 and the Esports World Cup. ' + TIE_FAME,
-          rank_fame(wins_offline), count('win'))
+          'Cup but also DreamHack, Gamers8 and the Esports World Cup. '
+          + tie_text('more podiums at those events'),
+          rank_by(wins_offline, top3_offline.__getitem__), count('win'))
     board('fncs-top5', 'Players', 'Top 10 by top-5 finishes at FNCS finals', 'player',
           'Fifth or better at an FNCS grand final, counting every season and region. '
-          + TIE_FAME, rank_fame(fncs_top5), phrase('top-5 finish', 'top-5 finishes'))
+          + tie_text('more top-3 finishes', 'more wins'),
+          rank_by(fncs_top5, podiums('fncs'), fncs_firsts.__getitem__),
+          phrase('top-5 finish', 'top-5 finishes'))
 
     fncs_titles = {p['pagename']: p['fncs_wins'] for p in PLAYABLE}
     board('fncs-finals-no-title', 'Players',
           'Top 10 by FNCS grand finals without ever winning one', 'player',
           'Grand finals reached by players whose FNCS title count is still zero. '
-          'One win and you leave this board for good. ' + TIE_FAME,
-          rank_fame(Counter({k: v for k, v in fncs_apps_all.items() if not fncs_titles.get(k)})),
+          'One win and you leave this board for good. '
+          + tie_text('more podiums in those finals', 'the better average finish in them'),
+          rank_by(Counter({k: v for k, v in fncs_apps_all.items() if not fncs_titles.get(k)}),
+                  podiums('fncs'), avg_finish('fncs')),
           count('final'))
     board('earnings-no-fncs', 'Players', 'Top 10 earners who have never won an FNCS',
           'player', 'Career prize money, among players with no FNCS title. ' + TIE_MONEY,
@@ -1373,21 +1465,24 @@ def build(BASE):
     board('fncs-streak-finals', 'Players',
           'Top 10 by consecutive FNCS grand finals qualified for', 'player',
           "The longest run of FNCS grand finals in a row, counting every region's "
-          'own final as one round. Miss a round and the run starts again. ' + TIE_FAME,
-          rank_fame(Counter({p: longest_run(s) for p, s in played_waves.items()})),
+          'own final as one round. Miss a round and the run starts again. '
+          + tie_text('the better average FNCS finish'),
+          rank_by(Counter({p: longest_run(s) for p, s in played_waves.items()}), avg_finish('regional')),
           phrase('final in a row', 'finals in a row'))
+    titles = lambda page: fncs_titles.get(page, 0)
     board('fncs-streak-wins', 'Players', 'Top 10 by consecutive FNCS titles', 'player',
           "Winning your region's grand final in consecutive rounds of the FNCS. "
           'A Globals or a LAN in between is not an FNCS round, so losing one does not '
           'end the run - the consecutive major titles board counts those. '
-          + TIE_FAME,
-          rank_fame(Counter({p: longest_run(s) for p, s in won_waves.items()})),
+          + tie_text('more FNCS titles in all', 'more FNCS podiums'),
+          rank_by(Counter({p: longest_run(s) for p, s in won_waves.items()}), titles, podiums('regional')),
           phrase('title in a row', 'titles in a row'))
     board('fncs-chapters', 'Players', 'Top 10 by FNCS titles across different chapters',
           'player',
           'How many different chapters of Fortnite a player has won an FNCS in - '
-          'three titles in one chapter counts once. ' + TIE_FAME,
-          rank_fame(Counter({p: len(s) for p, s in chapters_won.items()})),
+          'three titles in one chapter counts once. '
+          + tie_text('more FNCS titles in all', 'more FNCS podiums'),
+          rank_by(Counter({p: len(s) for p, s in chapters_won.items()}), titles, podiums('regional')),
           count('chapter'))
 
     # ==================================================== age at a major win =====
@@ -1682,17 +1777,28 @@ def build(BASE):
         #  'The field for the Global Championship, October 2023.'),
         # ('world-cup-2019', 'World Cup 2019', 'Fortnite World Cup Finals - Solo',
         #  'The solo field at the 2019 Fortnite World Cup, July 2019.'),
+        # The 2026 Solo FNCS (the user, 22 Oct 2026: "add common categories for
+        # this tournament, it's not done yet"): its seven regional grand finals
+        # as one field, a pattern rather than one event name. Its boards are a
+        # Tenite group of their own outside event mode (`FIELD_POOLS` in
+        # pool-boards.ts). Seven regions' places are not one leaderboard, so it
+        # carries no placements: each final's own top 10 comes as a tournament
+        # board once its results are in.
+        ('solos-2026', 'FNCS 2026 Solos', re.compile(r'FNCS 2026 - Solos BR: .+ - Grand Finals'),
+         'The field for the seven regional grand finals of the 2026 Solo FNCS, 26–27 October 2026.'),
     ]
 
     pools = []
     for pid, label, event, blurb in WANTED:
-        t = tour_of.get(event)
-        if not t:
-            print(f'!! {event!r} not in tournaments.json — skipped')
+        events = (sorted(n for n in tour_of if event.fullmatch(n)) if isinstance(event, re.Pattern)
+                  else [event] if event in tour_of else [])
+        if not events:
+            print(f'!! {getattr(event, "pattern", event)!r} not in tournaments.json — skipped')
             continue
+        t = tour_of[events[0]]
         raw, named, placed = set(), set(), {}
         for row in placements:
-            if row.get('tournament') != event or did_not_play(row):
+            if row.get('tournament') not in events or did_not_play(row):
                 continue
             # None until the result is in: the 2026 Globals rows are the entrants
             # with no place, plus fifty places with nobody in them yet.
@@ -1713,7 +1819,9 @@ def build(BASE):
         # in, not by a career total that already holds this event's prize.
         # Every tournament that started earlier counts, split per player the
         # way the per-format boards in cell 2 split it.
-        start = str(t['startdate'])[:10]
+        start = min(str(tour_of[n]['startdate'])[:10] for n in events)
+        if len(events) > 1:
+            placed = {}     # one place per region's final: no single leaderboard
         before = Counter()
         for row in placements:
             other = tour_of.get(row.get('tournament')) or {}
@@ -1734,7 +1842,8 @@ def build(BASE):
                     before[page] += each
 
         pools.append({'id': pid, 'label': label, 'blurb': blurb,
-                      'event': event, 'date': start,
+                      'event': events[0], 'date': start,
+                      **({'events': events} if len(events) > 1 else {}),
                       'players': sorted(named),
                       'placements': dict(sorted(placed.items())),
                       'earningsBefore': {page: round(before[page]) for page in sorted(named)}})

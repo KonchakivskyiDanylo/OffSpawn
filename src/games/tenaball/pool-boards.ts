@@ -1,9 +1,10 @@
-import type { Facts } from '@/data/liquipedia/facts';
+import type { Facts, HeadlineEvent } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
-import type { Pool } from '@/data/liquipedia/pools';
+import type { Pool, Pools } from '@/data/liquipedia/pools';
 import { Rankings, type Board } from "@/data/liquipedia/rankings";
-import { board, byValue, NEEDED, SLOTS, TIE_EARNINGS, TIE_GROUP_EARNINGS, type Ranked } from './board-builder';
-import type { RosterPlayer } from '@/data/liquipedia/roster';
+import { board, byValue, NEEDED, SLOTS, TIE_EARNINGS, TIE_GROUP_EARNINGS, tieText, type Ranked } from './board-builder';
+import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
+import { poolPlayers } from '@/games/shared/pool';
 import { money, ordinal, plural } from '@/lib/format';
 
 /**
@@ -60,6 +61,13 @@ export function poolBoards(
     display,
     tiebreak: p.earnings,
   });
+  /**
+   * Podiums at the events `which` keeps, then career earnings: what a level
+   * count of titles or appearances goes to (22 Oct 2026). Earnings alone
+   * without facts.json.
+   */
+  const podiumsThen = (p: RosterPlayer, which?: (event: HeadlineEvent) => boolean): readonly number[] =>
+    facts ? [facts.podiumsAt(p.id, which), p.earnings] : [p.earnings];
   /** A money board: the value is the earnings, so there is nothing under it. */
   const earner = (p: RosterPlayer): Ranked => ({
     key: p.id,
@@ -157,9 +165,11 @@ export function poolBoards(
       group,
       'Top 10 by FNCS wins',
       'player',
-      `Regional FNCS grand finals won, across every season and region. ${TIE_EARNINGS}`,
+      `Regional FNCS grand finals won, across every season and region. ${facts ? tieText('more FNCS podiums (top 3 in a grand final)') : TIE_EARNINGS}`,
       byValue(
-        players.filter((p) => p.fncsWins > 0).map((p) => player(p, p.fncsWins, plural(p.fncsWins, 'win'))),
+        players
+          .filter((p) => p.fncsWins > 0)
+          .map((p) => ({ ...player(p, p.fncsWins, plural(p.fncsWins, 'win')), tiebreak: podiumsThen(p) })),
       ),
     ),
   );
@@ -268,10 +278,13 @@ export function poolBoards(
           group,
           'Top 10 by major LAN appearances',
           'player',
-          `Epic’s offline majors only — the World Cup, the Globals, the Summit and the other LANs. ${TIE_EARNINGS}`,
+          `Epic’s offline majors only — the World Cup, the Globals, the Summit and the other LANs. ${tieText('more podiums at those LANs')}`,
           byValue(
             players
-              .map((p) => player(p, facts.of(p.id).lanApps, plural(facts.of(p.id).lanApps, 'LAN')))
+              .map((p) => ({
+                ...player(p, facts.of(p.id).lanApps, plural(facts.of(p.id).lanApps, 'LAN')),
+                tiebreak: podiumsThen(p, (headline) => headline.lan),
+              }))
               .filter((row) => row.value > 0),
           ),
         ),
@@ -284,10 +297,13 @@ export function poolBoards(
           group,
           'Top 10 by FNCS grand finals played',
           'player',
-          `Every regional grand final reached, plus the FNCS events played offline. ${TIE_EARNINGS}`,
+          `Every regional grand final reached, plus the FNCS events played offline. ${tieText('more podiums in those finals')}`,
           byValue(
             players
-              .map((p) => player(p, facts.of(p.id).fncsApps, plural(facts.of(p.id).fncsApps, 'final')))
+              .map((p) => ({
+                ...player(p, facts.of(p.id).fncsApps, plural(facts.of(p.id).fncsApps, 'final')),
+                tiebreak: podiumsThen(p, (headline) => headline.name.includes('FNCS')),
+              }))
               .filter((row) => row.value > 0),
           ),
         ),
@@ -503,5 +519,32 @@ export function poolRankings(
     generated,
     slots: SLOTS,
     boards: poolBoards(pool, players, facts, orgs),
+  });
+}
+
+/**
+ * The fields Tenite offers as a group of their own outside event mode, which
+ * has been off since 28 Sep 2026: the 2026 Solo FNCS (the user, 22 Oct 2026:
+ * "there is also solo fncs, add common categories for this tournament"). Its
+ * seven regional grand finals are one field in `pools.json`, with no places,
+ * so these are the boards a field fills before it plays; each final's own
+ * top 10 comes with the results as a tournament board.
+ */
+export const FIELD_POOLS: readonly string[] = ['solos-2026'];
+
+/**
+ * Every board of the `FIELD_POOLS`, each field under its own heading. Beside
+ * the all-time boards a title names its field — "Top 10 by career earnings"
+ * alone is the all-time board's — which event mode, showing nothing else, never
+ * needed.
+ */
+export function fieldBoards(pools: Pools | null, roster: Roster, facts: Facts | null, orgs: Orgs | null): Board[] {
+  return FIELD_POOLS.flatMap((id) => {
+    const pool = pools?.get(id);
+    if (!pool) return [];
+    return poolBoards(pool, poolPlayers(roster, pools, id), facts, orgs).map((made) => ({
+      ...made,
+      title: `${made.title} — ${pool.label} field`,
+    }));
   });
 }

@@ -22,11 +22,12 @@ export interface Ranked {
   value: number;
   display: string;
   /**
-   * What decides a tie on `value`, bigger first — career earnings for a
-   * player, combined earnings for a country or an org. Absent where the value
-   * is already money, and a tie there is a tie.
+   * What decides a tie on `value`, bigger first: the category's own steps in
+   * order, then career earnings for a player or combined earnings for a
+   * country or an org — `[podiums, earnings]` on a board of FNCS titles.
+   * Absent where the value is already money, and a tie there is a tie.
    */
-  tiebreak?: number;
+  tiebreak?: number | readonly number[];
   /** A team row's players — see `BoardRow.members`. */
   members?: BoardMember[];
 }
@@ -34,6 +35,16 @@ export interface Ranked {
 /** The tie rule for a player board counted in anything but money. */
 export const TIE_EARNINGS =
   'Players level on the count are ranked by career earnings, so the bigger earner is higher.';
+
+/**
+ * A tie rule with the category's own steps before the money, the way the
+ * notebook writes them (`tie_text` in `derived.py`): "Level ones go to more
+ * FNCS podiums, then to the bigger career earner." The user, 22 Oct 2026:
+ * "only career earnings isn't ideal… it could change depends on the category".
+ */
+export function tieText(...steps: string[]): string {
+  return `Level ones go to ${[...steps, 'the bigger career earner'].join(', then to ')}.`;
+}
 
 /** The same, for boards whose rows are countries or organisations. */
 export const TIE_GROUP_EARNINGS =
@@ -89,11 +100,24 @@ export function board(
  */
 export function byValue<T extends Ranked>(ranked: T[], ascending = false): T[] {
   return ranked.sort(
-    (a, b) =>
-      (ascending ? a.value - b.value : b.value - a.value) || (b.tiebreak ?? 0) - (a.tiebreak ?? 0),
+    (a, b) => (ascending ? a.value - b.value : b.value - a.value) || compareTies(b.tiebreak, a.tiebreak),
   );
 }
 
+/** The steps of a tiebreak as a list: one number is a list of one. */
+const steps = (tiebreak: Ranked['tiebreak']): readonly number[] =>
+  tiebreak === undefined ? [] : typeof tiebreak === 'number' ? [tiebreak] : tiebreak;
+
+/** `a` against `b`, step by step: positive when `a` is bigger at the first step they differ. */
+function compareTies(a: Ranked['tiebreak'], b: Ranked['tiebreak']): number {
+  const [x, y] = [steps(a), steps(b)];
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const diff = (x[i] ?? 0) - (y[i] ?? 0);
+    if (diff) return diff;
+  }
+  return 0;
+}
+
 function level(a: Ranked, b: Ranked): boolean {
-  return a.value === b.value && (a.tiebreak ?? 0) === (b.tiebreak ?? 0);
+  return a.value === b.value && compareTies(a.tiebreak, b.tiebreak) === 0;
 }

@@ -181,7 +181,7 @@ const NONE: PlayerFacts = {
  * shows (`players.json`, counted from the same finals) has him on none. This keeps "Won
  * FNCS in 2023" and "Won EU FNCS" about the same finals that count does.
  */
-function isRegionalFinal(event: RawEvent): boolean {
+export function isRegionalFinal(event: RawEvent): boolean {
   return event.kind === 'fncs' && !event.lan;
 }
 
@@ -256,6 +256,18 @@ export class Facts {
 
   has(playerId: string): boolean {
     return this.byPlayer.has(playerId);
+  }
+
+  /**
+   * How many headline events a player finished in the top 3 of, of those
+   * `which` keeps — the regional FNCS finals by default. What a level count of
+   * titles goes to on a Tenite board, before career earnings (22 Oct 2026).
+   */
+  podiumsAt(playerId: string, which: (event: HeadlineEvent) => boolean = isRegionalFinal): number {
+    return this.of(playerId).podium.filter((index) => {
+      const event = this.events[index];
+      return event !== undefined && which(event);
+    }).length;
   }
 
   /** Everyone recorded at one headline event. */

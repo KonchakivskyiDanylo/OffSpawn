@@ -1,6 +1,8 @@
 import type { Board } from '@/data/liquipedia/rankings';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { puzzleFor as careerPuzzle, dailyPool as careerPool } from '@/games/career-path/daily';
+import { DAILY_CATEGORIES, pickDaily as pairsFor } from '@/games/higher-lower/daily';
+import { CATEGORIES } from '@/games/higher-lower/engine';
 import { buildCriteria, type Criterion } from '@/games/list/criteria';
 import { listSig } from '@/games/list/daily';
 import { levelPlayers } from '@/games/shared/levels';
@@ -11,8 +13,16 @@ import { puzzleFor as whoPuzzle, dailyPool as whoPool } from '@/games/who-are-ya
 import { eligible as wordleEligible } from '@/games/wordle/engine';
 import { daysBetween } from './day';
 import { SAME_REST } from './reuse';
-import { dailyContext, pickPuzzle, type DailyData } from './generate';
-import { LIVE_DAILY, puzzleId, type DailyGame, type DailyPuzzles, type DailySet } from './types';
+import { boardPlayers, dailyContext, pickPuzzle, playersIn, SECRET_GAMES, servedIn, takenOn, type DailyData } from './generate';
+import {
+  DAILY_FROM,
+  LIVE_DAILY,
+  puzzleId,
+  type DailyCategory,
+  type DailyGame,
+  type DailyPuzzles,
+  type DailySet,
+} from './types';
 
 /**
  * The daily schedule editor's half on the server: what each day's puzzle is
@@ -20,10 +30,11 @@ import { LIVE_DAILY, puzzleId, type DailyGame, type DailyPuzzles, type DailySet 
  *
  * Behind `/analytics/daily` (the user, 3 Oct 2026: "Add to analytics a
  * possibility to change daily modes… for example Tenaball, I can change the
- * order in which it goes"). Only today and the days after it can change.
+ * order in which it goes"). Only today and the days after it can change, and
+ * the first days of a daily that were filled in for its archive (`late`).
  */
 
-/** A choice for a day: a player, a board, a list. */
+/** A choice for a day: a player, a board, a list, a category. */
 export interface Option {
   id: string;
   label: string;
@@ -34,18 +45,42 @@ export interface Option {
    * `past` is a day already played; a coming day's board can be moved instead.
    */
   used?: { day: string; changed: boolean; past: boolean }[];
+  /**
+   * Why it cannot go on the day being edited: a player it uses is already in
+   * another game that day ("Peterbot is the Career Path answer"). Higher or
+   * Lower's pairs are no reason: they are drawn again around it (`settle`).
+   */
+  clash?: string;
 }
 
 export interface Described {
   label: string;
-  /** A second line: the board's group, a player's band, the grid's columns. */
+  /** A second line: the board's group, a player's band, the grid's columns, the pairs. */
   detail?: string;
 }
 
 /** How near the same puzzle may come round before the editor flags it. */
 export const REPEAT_WINDOW = 30;
 
-const SECRET_GAMES: DailyGame[] = ['wordle', 'career-path', 'who-are-ya'];
+/** The games as players know them, for the editor's messages. */
+const NAME: Record<DailyGame, string> = {
+  wordle: 'Fortnitedle',
+  'career-path': 'Career Path',
+  'who-are-ya': 'Ready Up',
+  tenaball: 'Tenite',
+  list: 'List',
+  'tic-tac-toe': 'Box Fight',
+  'higher-lower': 'Higher or Lower',
+};
+
+/** Where a player sits in a game: "the Career Path answer", "on Tenite's board". */
+function role(game: DailyGame): string {
+  if (game === 'tenaball') return 'on Tenite’s board';
+  if (game === 'higher-lower') return 'in Higher or Lower’s pairs';
+  return `the ${NAME[game]} answer`;
+}
+
+const CATEGORY_LABEL = (category: string) => CATEGORIES.find((item) => item.id === category)?.label ?? category;
 
 /**
  * The things the labels and the options are read from, built once per data
@@ -84,6 +119,7 @@ const TIER: Record<string, string> = { easy: 'famous', medium: 'regular', hard: 
 export function describe(game: DailyGame, puzzle: DailyPuzzles[DailyGame] | undefined, data: DailyData): Described {
   if (!puzzle) return { label: '—' };
   const { byId, boards, lists, rules } = lookup(data);
+  const name = (id: string) => byId.get(id)?.name ?? id;
   if ('secret' in puzzle) {
     const player = byId.get(puzzle.secret);
     return { label: player?.name ?? puzzle.secret, detail: player ? TIER[player.tier] : 'no longer on the roster' };
@@ -96,9 +132,15 @@ export function describe(game: DailyGame, puzzle: DailyPuzzles[DailyGame] | unde
     const list = lists.get(puzzle.list);
     return { label: list?.title ?? puzzle.list, detail: list ? `${list.answers.length} answers` : 'list not found' };
   }
+  if ('category' in puzzle) {
+    return {
+      label: `${CATEGORY_LABEL(puzzle.category)} · ${puzzle.players.length - 1} pairs`,
+      detail: puzzle.players.map(name).join(' → '),
+    };
+  }
   if (game !== 'tic-tac-toe' || !('rows' in puzzle)) return { label: JSON.stringify(puzzle) };
-  const name = (id: string) => rules.get(id) ?? id;
-  return { label: puzzle.rows.map(name).join(' · '), detail: `× ${puzzle.cols.map(name).join(' · ')}` };
+  const rule = (id: string) => rules.get(id) ?? id;
+  return { label: puzzle.rows.map(rule).join(' · '), detail: `× ${puzzle.cols.map(rule).join(' · ')}` };
 }
 
 /**
@@ -152,19 +194,62 @@ function sigOf(game: 'tenaball' | 'list', id: string, data: DailyData): string |
   return list ? listSig(list) : null;
 }
 
-/** What a game's puzzle may be set to by hand. Tic Tac Toe has no list: its six rules are drawn together. */
+/**
+ * Whether `game`'s puzzle on `set` may still change: from the game's first
+ * day, on today and after — or on a day filled in for its archive.
+ */
+export function canEdit(set: DailySet, game: DailyGame, firstEditable: string): boolean {
+  return DAILY_FROM[game] <= set.day && (set.day >= firstEditable || Boolean(set.late?.includes(game)));
+}
+
+/**
+ * The players `game`'s puzzle on `set` shares with another game that day, and
+ * which game: the clashes "nobody in two games on one day" rules out.
+ */
+export function clashesOn(set: DailySet, game: DailyGame, data: DailyData): { id: string; game: DailyGame }[] {
+  const mine = new Set(playersIn(game, set.puzzles[game], data));
+  if (mine.size === 0) return [];
+  return servedIn(set)
+    .filter((other) => other !== game)
+    .flatMap((other) => playersIn(other, set.puzzles[other], data).filter((id) => mine.has(id)).map((id) => ({ id, game: other })));
+}
+
+/** "Peterbot is the Career Path answer that day". */
+function clashText(clash: { id: string; game: DailyGame }, data: DailyData): string {
+  return `${lookup(data).byId.get(clash.id)?.name ?? clash.id} is ${role(clash.game)} that day`;
+}
+
+/**
+ * What a game's puzzle may be set to by hand. Tic Tac Toe has no list: its six
+ * rules are drawn together. With `day`, each option says if it would put a
+ * player in two games that day — Higher or Lower's pairs aside, which are
+ * drawn again around it.
+ */
 export function optionsFor(
   game: DailyGame,
   data: DailyData,
   sets: readonly DailySet[] = [],
   firstEditable = '',
+  day?: DailySet,
 ): Option[] {
   const { roster, majors, teammates, facts } = data;
   const { byId, boards, lists } = lookup(data);
+  // Who the other games use that day, by player: the reason an option cannot go there.
+  const elsewhere = new Map<string, DailyGame>();
+  if (day) {
+    for (const other of servedIn(day)) {
+      if (other === game || (other === 'higher-lower' && game !== 'higher-lower')) continue;
+      for (const id of playersIn(other, day.puzzles[other], data)) elsewhere.set(id, other);
+    }
+  }
+  const clashFor = (ids: readonly string[]) => {
+    const id = ids.find((candidate) => elsewhere.has(candidate));
+    return id ? clashText({ id, game: elsewhere.get(id)! }, data) : undefined;
+  };
   const players = (pool: readonly RosterPlayer[]): Option[] =>
     [...pool]
       .sort((a, b) => b.earnings - a.earnings)
-      .map((player) => ({ id: player.id, label: player.name, group: TIER[player.tier] }));
+      .map((player) => ({ id: player.id, label: player.name, group: TIER[player.tier], clash: clashFor([player.id]) }));
   switch (game) {
     case 'wordle':
       return players(levelPlayers(roster, 'medium', wordleEligible));
@@ -178,6 +263,7 @@ export function optionsFor(
         label: board.title,
         group: board.group,
         used: usesOf('tenaball', board.id, sets, boardSig(board), firstEditable).map((use) => ({ ...use, past: use.day < firstEditable })),
+        clash: clashFor(boardPlayers(board)),
       }));
     case 'list':
       return [...lists.values()].map((list) => ({
@@ -186,15 +272,28 @@ export function optionsFor(
         group: `${list.answers.length} answers`,
         used: usesOf('list', list.id, sets, listSig(list), firstEditable).map((use) => ({ ...use, past: use.day < firstEditable })),
       }));
+    case 'higher-lower':
+      // A category: its ten pairs are drawn clear of every other game that day.
+      return DAILY_CATEGORIES.map((category) => ({ id: category, label: CATEGORY_LABEL(category), group: 'ten new pairs' }));
     default:
       return [];
   }
 }
 
-/** The puzzle for a choice from `optionsFor`, or null when it cannot make one. */
-export function puzzleForChoice(game: DailyGame, id: string, day: string, data: DailyData): DailyPuzzles[DailyGame] | null {
+/**
+ * The puzzle for a choice from `optionsFor`, or null when it cannot make one.
+ * Higher or Lower's pairs are drawn for the category chosen, clear of the
+ * day's other players and of the pairs on the days around it.
+ */
+export function puzzleForChoice(
+  game: DailyGame,
+  id: string,
+  set: DailySet,
+  others: readonly DailySet[],
+  data: DailyData,
+): DailyPuzzles[DailyGame] | null {
   const { byId, boards, lists } = lookup(data);
-  const seed = `daily:${day}:chosen:${game}`;
+  const seed = `daily:${set.day}:chosen:${game}`;
   switch (game) {
     case 'wordle': {
       const player = byId.get(id);
@@ -216,6 +315,11 @@ export function puzzleForChoice(game: DailyGame, id: string, day: string, data: 
       const list = lists.get(id);
       return list ? { list: id, sig: listSig(list) } : null;
     }
+    case 'higher-lower': {
+      if (!DAILY_CATEGORIES.includes(id as DailyCategory)) return null;
+      const ctx = dailyContext(set.day, data, others, takenOn(set, data, game), `:chosen:${Date.now().toString(36)}`);
+      return pairsFor(data.roster, ctx, id as DailyCategory);
+    }
     default:
       return null;
   }
@@ -223,7 +327,7 @@ export function puzzleForChoice(game: DailyGame, id: string, day: string, data: 
 
 /**
  * A new draw of one game for one day, steering clear of every other day in
- * the schedule and of the day's other secret players — and of what it was.
+ * the schedule and of the day's other players — and of what it was.
  */
 export function redraw(
   game: DailyGame,
@@ -234,16 +338,9 @@ export function redraw(
   // Today's may be pinned; the same board drawn again is still the same puzzle.
   const was = puzzleId(set.puzzles[game]);
   for (let attempt = 0; attempt < 6; attempt++) {
-    const taken = new Set(
-      SECRET_GAMES.filter((other) => other !== game).flatMap((other) => {
-        const puzzle = set.puzzles[other] as { secret?: string } | undefined;
-        return puzzle?.secret ? [puzzle.secret] : [];
-      }),
-    );
-    if (SECRET_GAMES.includes(game)) {
-      const current = set.puzzles[game] as { secret?: string } | undefined;
-      if (current?.secret) taken.add(current.secret);
-    }
+    const taken = takenOn(set, data, game);
+    // A secret player drawn again is someone else.
+    if (SECRET_GAMES.includes(game)) for (const id of playersIn(game, set.puzzles[game], data)) taken.add(id);
     const salt = `:redraw:${Date.now().toString(36)}:${attempt}`;
     const puzzle = pickPuzzle(game, data, dailyContext(set.day, data, [set, ...others], taken, salt));
     if (puzzle && puzzleId(puzzle) !== was) return puzzle;
@@ -251,7 +348,39 @@ export function redraw(
   return null;
 }
 
-/** What `puzzle` repeats: the same secret, board or list within `REPEAT_WINDOW` days, or a secret twice in one day. */
+/**
+ * `set` with `puzzle` as `game`'s, and nobody in two games: a player it shares
+ * with Higher or Lower's pairs sends those back for a new draw, if that day's
+ * pairs may still change; one it shares with any other game is refused, with
+ * the reason. `redrawn` names the games drawn again.
+ */
+export function settle(
+  game: DailyGame,
+  puzzle: DailyPuzzles[DailyGame],
+  set: DailySet,
+  others: readonly DailySet[],
+  data: DailyData,
+  firstEditable: string,
+): { set: DailySet; redrawn: DailyGame[] } | { error: string } {
+  let next: DailySet = { ...set, puzzles: { ...set.puzzles, [game]: puzzle } };
+  const clashes = clashesOn(next, game, data);
+  const fixable = (other: DailyGame) => other === 'higher-lower' && game !== 'higher-lower' && canEdit(set, other, firstEditable);
+  const hard = clashes.find((clash) => !fixable(clash.game));
+  if (hard) return { error: `${clashText(hard, data)}.` };
+  if (clashes.length === 0) return { set: next, redrawn: [] };
+  // The same category, new players: the day keeps the question it had.
+  const category = next.puzzles['higher-lower']?.category;
+  const ctx = dailyContext(next.day, data, others, takenOn(next, data, 'higher-lower'), `:settle:${Date.now().toString(36)}`);
+  const pairs = pairsFor(data.roster, ctx, category);
+  if (!pairs) return { error: `${clashText(clashes[0], data)}, and Higher or Lower could not be drawn again around it.` };
+  next = { ...next, puzzles: { ...next.puzzles, 'higher-lower': pairs as DailyPuzzles['higher-lower'] } };
+  return { set: next, redrawn: ['higher-lower'] };
+}
+
+/**
+ * What `puzzle` repeats or shares: the same secret, board or list within
+ * `REPEAT_WINDOW` days, or a player in another game the same day.
+ */
 export function warningFor(game: DailyGame, set: DailySet, all: readonly DailySet[], data: DailyData): string | null {
   const puzzle = set.puzzles[game];
   if (!puzzle || game === 'tic-tac-toe') return null;
@@ -260,11 +389,7 @@ export function warningFor(game: DailyGame, set: DailySet, all: readonly DailySe
     return value?.secret ?? value?.board ?? value?.list ?? null;
   };
   const mine = key(puzzle);
-  const out: string[] = [];
-  if (SECRET_GAMES.includes(game)) {
-    const twin = SECRET_GAMES.find((other) => other !== game && key(set.puzzles[other]) === mine);
-    if (twin) out.push(`also the answer in ${twin} that day`);
-  }
+  const out: string[] = clashesOn(set, game, data).map((clash) => clashText(clash, data));
   if (game === 'tenaball' || game === 'list') {
     // A board or a list is a repeat on any day while its answers are the same people.
     const now = sigOf(game, mine ?? '', data);
@@ -272,7 +397,7 @@ export function warningFor(game: DailyGame, set: DailySet, all: readonly DailySe
       (use) => !use.changed && !use.rested,
     );
     if (same.length) out.push(`also on ${same.map((use) => use.day).join(', ')}, with the same answers`);
-  } else {
+  } else if (SECRET_GAMES.includes(game)) {
     const near = all
       .filter((other) => other.day !== set.day && Math.abs(daysBetween(other.day, set.day)) <= REPEAT_WINDOW)
       .filter((other) => SECRET_GAMES.some((g) => key(other.puzzles[g]) === mine))
@@ -283,7 +408,7 @@ export function warningFor(game: DailyGame, set: DailySet, all: readonly DailySe
   return `${describe(game, puzzle, data).label}: ${out.join('; ')}`;
 }
 
-export function rowsFor(sets: readonly DailySet[], all: readonly DailySet[], data: DailyData) {
+export function rowsFor(sets: readonly DailySet[], all: readonly DailySet[], data: DailyData, firstEditable: string) {
   return sets.map((set) => ({
     day: set.day,
     puzzles: Object.fromEntries(
@@ -292,5 +417,6 @@ export function rowsFor(sets: readonly DailySet[], all: readonly DailySet[], dat
         { ...describe(game, set.puzzles[game], data), warning: warningFor(game, set, all, data) },
       ]),
     ),
+    editable: Object.fromEntries(LIVE_DAILY.map((game) => [game, canEdit(set, game, firstEditable)])),
   }));
 }

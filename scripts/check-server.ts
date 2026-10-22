@@ -211,27 +211,42 @@ try {
   const daily = (await request('/api/admin/dashboard?days=7&source=daily', {}, cookie)).body as typeof data;
   check(daily?.traffic?.totals.opens === 1 && daily.traffic.totals.starts === 1, `the daily filter reads ${JSON.stringify(daily?.traffic?.totals)}`);
 
-  // The daily schedule editor: made ahead, two days swapped, a past day refused.
+  // The daily schedule editor: made ahead, two days swapped, a past day
+  // refused, and nobody put in two games on one day.
   check((await request('/api/admin/daily?days=7')).status === 401, 'the schedule answered without a login');
   const plan = (await request('/api/admin/daily?days=7', {}, cookie)).body as {
     firstEditable: string;
-    rows: { day: string; editable: boolean; puzzles: Record<string, { label: string }> }[];
+    rows: { day: string; editable: Record<string, boolean>; puzzles: Record<string, { label: string }> }[];
   };
-  const editable = plan?.rows?.filter((row) => row.editable) ?? [];
+  const editable = plan?.rows?.filter((row) => row.editable.tenaball) ?? [];
   check(editable.length === 7, `the schedule has ${editable.length} days ahead, expected 7`);
   if (editable.length >= 2) {
     const [a, b] = editable;
+    // A swap goes through, or is refused because a player would be in two games that day.
     const swap = await post('/api/admin/daily/swap', { game: 'tenaball', a: a.day, b: b.day }, cookie);
-    check(swap.status === 204, `a swap was refused (${swap.status})`);
-    const after = (await request('/api/admin/daily?days=7', {}, cookie)).body as typeof plan;
-    const [a2, b2] = after.rows.filter((row) => row.editable);
-    check(
-      a2.puzzles.tenaball.label === b.puzzles.tenaball.label && b2.puzzles.tenaball.label === a.puzzles.tenaball.label,
-      'the swap did not swap the two days',
-    );
+    const clash = (body: unknown) => /that day/.test(String((body as { error?: string })?.error));
+    check(swap.status === 200 || (swap.status === 409 && clash(swap.body)), `a swap was refused (${swap.status})`);
+    if (swap.status === 200) {
+      const after = (await request('/api/admin/daily?days=7', {}, cookie)).body as typeof plan;
+      const [a2, b2] = after.rows.filter((row) => row.editable.tenaball);
+      check(
+        a2.puzzles.tenaball.label === b.puzzles.tenaball.label && b2.puzzles.tenaball.label === a.puzzles.tenaball.label,
+        'the swap did not swap the two days',
+      );
+    }
     check(
       (await post('/api/admin/daily/redraw', { game: 'tenaball', day: '2020-01-01' }, cookie)).status === 400,
       'a day long past was redrawn',
+    );
+    // The day's Career Path and Ready Up answers cannot be its Fortnitedle answer too.
+    const set = (await request(`/api/daily/${a.day}`)).body as { puzzles: Record<string, { secret?: string }> };
+    const others = ['career-path', 'who-are-ya'].flatMap((game) => set?.puzzles?.[game]?.secret ?? []);
+    const tries = await Promise.all(
+      others.map((id) => post('/api/admin/daily/choose', { game: 'wordle', day: a.day, id }, cookie)),
+    );
+    check(
+      others.length === 2 && tries.every((got) => got.status !== 200) && tries.some((got) => got.status === 409 && clash(got.body)),
+      `a player was put in two games on one day (${tries.map((got) => got.status).join(', ')})`,
     );
   }
   check(data.wordle?.[0]?.name === 'Bugha' && data.wordle[0].solved === 1, 'the dashboard lost the Fortnitedle round');

@@ -17,10 +17,10 @@ import { loadRoster, EXPORT_DATE, Roster, type LiquipediaRow, type RosterPlayer 
 import { loadJson } from '@/data/liquipedia/files';
 import { loadMajors } from '@/data/liquipedia/majors';
 import { loadTeammates } from '@/data/liquipedia/teammates';
-import { loadFacts } from '@/data/liquipedia/facts';
+import { isRegionalFinal, loadFacts } from '@/data/liquipedia/facts';
 import { loadOrgs } from '@/data/liquipedia/orgs';
 import { loadPools } from '@/data/liquipedia/pools';
-import { loadRankings, membersOf } from '@/data/liquipedia/rankings';
+import { loadRankings, membersOf, type Board } from '@/data/liquipedia/rankings';
 import { deal, dealInTurn, dealWeighted } from '@/games/shared/rotation';
 import { TERMS, termsIn, type TermId } from '@/games/shared/glossary';
 import { dealSecret, DEFAULT_POOL, RANDOM_MIX, resolvePool, type PoolChoice } from '@/games/shared/pool';
@@ -54,12 +54,12 @@ import * as career from '@/games/career-path/engine';
 import * as whoAreYa from '@/games/who-are-ya/engine';
 import * as tenaball from '@/games/tenaball/engine';
 import { buildCriteria as buildListCriteria, buildPoolCriteria } from '@/games/list/criteria';
-import { poolBoards } from '@/games/tenaball/pool-boards';
+import { FIELD_POOLS, poolBoards } from '@/games/tenaball/pool-boards';
 import { derivedBoards } from '@/games/tenaball/derived-boards';
 import { globalsBoards, globalsEvents } from '@/games/tenaball/globals-boards';
 import { socialBoards } from '@/games/tenaball/social-boards';
 import { recordBoards } from '@/games/tenaball/record-boards';
-import { winnerBoards } from '@/games/tenaball/winner-boards';
+import { fncsRegion, winnerBoards } from '@/games/tenaball/winner-boards';
 import * as griefer from '@/games/impostor/engine';
 import * as ttt from '@/games/tic-tac-toe/engine';
 import * as connections from '@/games/connections/engine';
@@ -87,8 +87,9 @@ import * as daily from '@/daily/day';
 import * as dailyProgress from '@/daily/progress';
 import { clueGrid, clueResult, snapClues } from '@/daily/clue-round';
 import { knownPlayers } from '@/daily/fame';
-import { generateDaily } from '@/daily/generate';
-import { DAILY_GAMES, puzzleId, type DailySet } from '@/daily/types';
+import { freezeDay, generateDaily, missingFrom, playersIn } from '@/daily/generate';
+import { DAILY_FROM, DAILY_GAMES, gamesOn, puzzleId, type DailyGame, type DailySet } from '@/daily/types';
+import * as hlDaily from '@/games/higher-lower/daily';
 import * as wordleDaily from '@/games/wordle/daily';
 import * as careerDaily from '@/games/career-path/daily';
 import * as whoDaily from '@/games/who-are-ya/daily';
@@ -931,6 +932,7 @@ if (rankings) {
   const built = [
     ...derivedBoards(roster.players),
     ...(majors ? globalsBoards(majors, roster) : []),
+    ...(facts ? [...winnerBoards(facts, roster), ...recordBoards(facts, roster)] : []),
     ...pools.pools.flatMap((pool) =>
       poolBoards(pool, pool.players.flatMap((id) => byId.get(id) ?? []), facts, orgs),
     ),
@@ -938,12 +940,32 @@ if (rankings) {
   for (const board of built) {
     check(!/alphabet|by name/i.test(board.tieRule), `tenaball: ${board.id} still breaks ties by name`);
     const tenth = board.rows[tenaball.SLOTS - 1];
-    // Level on the value is fine when the rule has something under it.
+    // Level on the value is fine when the rule has something under it: the
+    // category's own steps end in the money ("the bigger career earner").
     if (tenth.value === board.next.value) {
-      check(/earnings|born/i.test(board.tieRule), `tenaball: ${board.id} is level at the cut with no tiebreak`);
+      check(/earn|born|oldest|newest|won first/i.test(board.tieRule), `tenaball: ${board.id} is level at the cut with no tiebreak`);
     }
   }
-  notes.push(`tenaball: ${built.length} boards built in the browser (derived + event fields)`);
+  notes.push(`tenaball: ${built.length} boards built in the browser (derived + records + winners + event fields)`);
+
+  // Level counts go to the category's own tiebreak before the money (22 Oct
+  // 2026): FNCS titles to FNCS podiums, the most wins in a region to podiums
+  // there. Read against facts.json, so the notebook and the browser agree.
+  if (facts) {
+    const atCut = (board: Board | null | undefined, podiums: (id: string) => number) => {
+      if (!board) return true;
+      const [tenth, next] = [board.rows[tenaball.SLOTS - 1], board.next];
+      return tenth.value !== next.value || podiums(tenth.key) >= podiums(next.key);
+    };
+    check(atCut(rankings?.get('fncs-wins'), (id) => facts.podiumsAt(id)), 'tenaball: fncs-wins splits a level cut against FNCS podiums');
+    check(/podiums/.test(rankings?.get('fncs-wins')?.tieRule ?? 'podiums'), 'tenaball: fncs-wins does not say level titles go to podiums');
+    const most = winnerBoards(facts, roster).filter((board) => board.id.startsWith('fncs-most:'));
+    const wrong = most.filter((board) => {
+      const region = board.id.slice('fncs-most:'.length);
+      return !atCut(board, (id) => facts.podiumsAt(id, (event) => isRegionalFinal(event) && fncsRegion(event) === region));
+    });
+    check(wrong.length === 0, `tenaball: ${wrong.map((board) => board.id).join(', ')} split a level cut against the region's podiums`);
+  }
 }
 
 // -------------------------------------------------------------------- 7. List
@@ -2833,7 +2855,10 @@ if (pools.pools.length > 0) {
       return n > 0 && n < majors.minAppearances;
     });
     if (majors && shortCareers) reach.push(['Career Path', majors.inField(field).length]);
-    for (const [game, n] of reach) check(n === field.length, `event ${pool.label}: ${game} deals ${n} of ${field.length}`);
+    // A field shown as a Tenite group only (`FIELD_POOLS`: the 2026 Solo FNCS, 355
+    // qualifiers, some with no major yet) is not held to it: its reach is a note.
+    const strict = !FIELD_POOLS.includes(pool.id);
+    for (const [game, n] of reach) check(!strict || n === field.length, `event ${pool.label}: ${game} deals ${n} of ${field.length}`);
     notes.push(
       `event ${pool.label}: ${reach.map(([game, n]) => `${game} ${n}`).join(', ')} of ${field.length}` +
         (majors && !shortCareers ? ` (Career Path ${majors.inField(field).length} until cell 7 runs)` : ''),
@@ -2957,6 +2982,19 @@ if (socials.platforms.length > 0) {
   const evening = Date.parse('2026-10-25T22:30:00Z');
   check(daily.msUntilNextDay(evening) === 30 * 60_000, `daily: half an hour to midnight read ${daily.msUntilNextDay(evening)}ms`);
   check(daily.puzzleNumber(daily.DAILY_START) === 1 && daily.puzzleNumber(daily.addDays(daily.DAILY_START, 9)) === 10, 'daily: puzzle numbers are off');
+  // Each game counts from its own first day: Fortnitedle's #1 is 19 Oct, the day Tenite was on #15.
+  check(
+    daily.puzzleNumber(DAILY_FROM.wordle, 'wordle') === 1 &&
+      daily.puzzleNumber(DAILY_FROM.wordle, 'tenaball') === daily.puzzleNumber(DAILY_FROM.wordle) &&
+      daily.puzzleDay(3, 'higher-lower') === daily.addDays(DAILY_FROM['higher-lower'], 2),
+    'daily: a game does not number its puzzles from its own first day',
+  );
+  check(
+    gamesOn(daily.addDays(DAILY_FROM.wordle, -1)).every((game) => DAILY_FROM[game] < DAILY_FROM.wordle) &&
+      gamesOn(DAILY_FROM.wordle).includes('wordle') &&
+      !gamesOn(DAILY_FROM.wordle).includes('tic-tac-toe'),
+    'daily: a day has a puzzle for a game that had not started, or for Box Fight',
+  );
 
   // Streaks count days played in a row, up to today or, before today's is played, yesterday.
   const days = ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-05'];
@@ -3044,6 +3082,56 @@ if (socials.platforms.length > 0) {
       // No secret player twice on one day.
       const secrets = [p.wordle?.secret, p['career-path']?.secret, p['who-are-ya']?.secret].filter(Boolean);
       check(new Set(secrets).size === secrets.length, `daily ${day}: one player is the secret in two games`);
+      // Nor anyone in two games at all: a secret, a name on Tenite's board, a player in Higher or Lower's pairs.
+      {
+        const owner = new Map<string, DailyGame>();
+        const twice: string[] = [];
+        for (const game of DAILY_GAMES) {
+          for (const id of playersIn(game, p[game], data)) {
+            const was = owner.get(id);
+            if (was && was !== game) twice.push(`${id} in ${was} and ${game}`);
+            else owner.set(id, game);
+          }
+        }
+        check(twice.length === 0, `daily ${day}: a player is in two games — ${twice.slice(0, 3).join('; ')}`);
+      }
+
+      // Higher or Lower: ten pairs of well-known players that rebuild, play to
+      // the end through a wrong answer, come back from a snapshot, and pin.
+      const hl = p['higher-lower'] && hlDaily.restoreDaily(p['higher-lower'], byId, null);
+      check(
+        Boolean(hl) && hlDaily.pairsIn(hl!) === hlDaily.DAILY_ROUNDS && hl!.chain.every((player) => knownPlayers(roster).has(player.id)),
+        `daily ${day}: Higher or Lower did not rebuild ten pairs of well-known players`,
+      );
+      if (hl) {
+        let perfect = hl;
+        for (let i = 0; i < hlDaily.pairsIn(hl); i++) perfect = hlDaily.answer(perfect, hlDaily.truthAt(hl, i));
+        check(
+          hlDaily.finished(perfect) && hlDaily.result(perfect).score === '10/10' && hlDaily.result(perfect).outcome === 'won' &&
+            hlDaily.shareGrid(perfect).join('') === '🟩'.repeat(10),
+          `daily ${day}: Higher or Lower's right answers read ${hlDaily.result(perfect).score} ${hlDaily.shareGrid(perfect).join('/')}`,
+        );
+        const opposite = (answer: string) => (answer === 'higher' ? 'lower' : 'higher');
+        const slipped = hlDaily.answer(hl, opposite(hlDaily.truthAt(hl, 0)));
+        check(!hlDaily.finished(slipped) && !hlDaily.rightAt(slipped, 0), `daily ${day}: a wrong Higher or Lower answer ended the day`);
+        const back = hlDaily.restoreDaily(p['higher-lower']!, byId, hlDaily.snapshot(slipped));
+        check(back?.answers.length === 1 && hlDaily.scoreOf(back) === 0, `daily ${day}: a saved Higher or Lower round did not come back`);
+        const ties = hl.chain.slice(1).filter((_player, i) => hlDaily.truthAt(hl, i) === 'equal').length;
+        check(hl.category === 'fncsWins' || ties === 0, `daily ${day}: Higher or Lower dealt a tie on ${hl.category}`);
+        const pinned = hlDaily.freezeDaily(p['higher-lower']!, roster);
+        check(
+          Boolean(pinned?.frozen) && pinned!.frozen!.length === hl.chain.length && hlDaily.freezeDaily(pinned!, roster) === null &&
+            puzzleId(pinned) === puzzleId(p['higher-lower']),
+          `daily ${day}: Higher or Lower did not pin its numbers, pinned twice, or would orphan a saved round`,
+        );
+        if (pinned?.frozen && hl.category !== 'age') {
+          // The pinned numbers win over today's data: turn the first pair round and the answer turns with it.
+          const frozen = [...pinned.frozen];
+          [frozen[0], frozen[1]] = [frozen[1], frozen[0]];
+          const swapped = hlDaily.restoreDaily({ ...pinned, frozen }, byId, null)!;
+          check(hlDaily.truthAt(swapped, 0) !== hlDaily.truthAt(hl, 0) || frozen[0] === frozen[1], `daily ${day}: a pinned Higher or Lower day rebuilt from today's data`);
+        }
+      }
 
       // Tenaball: rebuilds, and a snapshot taken mid-round comes back the same.
       const tb = p.tenaball && tenaballDaily.restoreDaily(p.tenaball, rankings, roster, socials, majors, null, facts);
@@ -3096,6 +3184,37 @@ if (socials.platforms.length > 0) {
       const tt = p['tic-tac-toe'] && tttDaily.restoreDaily(p['tic-tac-toe'], roster, facts, orgs, socials, byId, null);
       check(Boolean(tt) && tt!.difficulty === tttDaily.DAILY_LEVEL, `daily ${day}: Tic Tac Toe did not rebuild`);
       if (tt) check(tt.board.candidates.flat().every((cell) => cell.length >= 1), `daily ${day}: Tic Tac Toe has an empty cell`);
+    }
+    // Higher or Lower changes category every day, and a player sits out a week at least.
+    const categories = history.map((set) => set.puzzles['higher-lower']?.category);
+    check(categories.every((category, i) => i === 0 || category !== categories[i - 1]), `daily: Higher or Lower had one category two days running`);
+    const hlAgain = history.flatMap((set, i) =>
+      (set.puzzles['higher-lower']?.players ?? []).filter((id) =>
+        history.slice(Math.max(0, i - 7), i).some((before) => before.puzzles['higher-lower']?.players.includes(id)),
+      ),
+    );
+    check(hlAgain.length === 0, `daily: Higher or Lower brought back ${hlAgain.slice(0, 3).join(', ')} within a week`);
+    // A daily that starts later is filled into a day already kept: the kept
+    // puzzle stays, and the new ones keep clear of its players.
+    {
+      const later = daily.addDays(day, 1);
+      const kept = generateDaily(later, data, history, ['tenaball']);
+      const filled = generateDaily(later, data, history, missingFrom(kept), kept);
+      const live = gamesOn(later);
+      const owners = live.flatMap((game) => playersIn(game, filled.puzzles[game], data));
+      check(
+        puzzleId(filled.puzzles.tenaball) === puzzleId(kept.puzzles.tenaball) &&
+          live.every((game) => filled.puzzles[game]) &&
+          new Set(owners).size === owners.length,
+        `daily ${later}: filling in a kept day changed it, missed a game, or put a player in two games`,
+      );
+      // Pinning a day pins Tenite's board, and Higher or Lower's numbers too.
+      const withPairs = generateDaily(later, data, history, ['higher-lower'], filled);
+      const frozenDay = freezeDay(withPairs, data, later);
+      check(
+        Boolean(frozenDay?.puzzles.tenaball?.frozen && frozenDay.puzzles['higher-lower']?.frozen),
+        `daily ${later}: pinning a day did not pin both Tenite's board and Higher or Lower's numbers`,
+      );
     }
     const window = (game: 'wordle' | 'career-path' | 'who-are-ya') => history.map((set) => set.puzzles[game]?.secret);
     const allSecrets = [...window('wordle'), ...window('career-path'), ...window('who-are-ya')];

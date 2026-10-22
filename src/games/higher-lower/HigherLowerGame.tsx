@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { sendStart, useRoundRecorder } from '@/analytics/client';
+import { DailyEnd, DailyPending } from '@/components/DailyEnd';
 import { GameShell } from '@/components/GameShell';
+import { useDailyRound, usePlayMode } from '@/daily/useDailyRound';
 import { RosterNote } from '@/components/LiquipediaGate';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { PlayerAvatar } from '@/components/PlayerAvatar';
@@ -36,6 +38,20 @@ import {
   type GameState,
   record as roundRecord,
 } from './engine';
+import {
+  answer as answerDaily,
+  finished as dailyFinished,
+  pairsIn,
+  record as dailyRecord,
+  restoreDaily,
+  result as dailyResult,
+  rightAt,
+  scoreOf,
+  shareGrid,
+  snapshot as dailySnapshot,
+  truthAt,
+  type DailyState,
+} from './daily';
 import './higher-lower.css';
 
 const meta = getGame('higher-lower')!;
@@ -112,9 +128,27 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const [difficulty, setDifficulty] = useLocalState<Difficulty>('higher-lower:level', 'easy');
   const [game, setGame] = useState<GameState | null>(null);
 
+  // The daily: ten fixed pairs, every one played (`daily.ts`).
+  const [dailyOn, setDailyOn] = usePlayMode('higher-lower');
+  const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
+  const daily = useDailyRound('higher-lower', {
+    on: dailyOn,
+    ready: true,
+    restore: (puzzle, saved) => restoreDaily(puzzle, byId, saved),
+    snapshot: dailySnapshot,
+    finished: dailyFinished,
+    result: dailyResult,
+  });
+  useRoundRecorder('higher-lower', dailyOn && daily.endedHere, () => ({
+    title: `Higher or Lower — daily ${daily.day}, ${scoreOf(daily.state!)}/${pairsIn(daily.state!)}`,
+    data: EXPORT_DATE,
+    setup: { daily: daily.day, category: daily.state!.category },
+    ...dailyRecord(daily.state!),
+  }));
+
   useRoundRecorder(
     'higher-lower',
-    game !== null && (game.status === 'gameover' || game.status === 'cleared'),
+    !dailyOn && game !== null && (game.status === 'gameover' || game.status === 'cleared'),
     () => ({
       title: `Higher or Lower — ${game!.category}, ${game!.score} in a row`,
       data: EXPORT_DATE,
@@ -199,10 +233,41 @@ function Game({ roster, pools }: { roster: Roster; pools: Pools | null }) {
   const answer = (choiceMade: Answer) =>
     setGame((prev) => (prev ? submitAnswer(prev, choiceMade) : prev));
 
+  const dailyShell = { on: dailyOn, number: daily.number, setOn: setDailyOn };
+  if (dailyOn) {
+    const played = daily.status === 'played' ? daily.answers : null;
+    return (
+      <GameShell game={meta} dataNote={<RosterNote />} daily={dailyShell}>
+        {daily.state ? (
+          <DailyBoard
+            state={daily.state}
+            onAnswer={(given) => daily.setState(answerDaily(daily.state!, given))}
+            end={
+              <DailyEnd
+                game="higher-lower"
+                number={daily.number}
+                day={daily.day}
+                result={dailyResult(daily.state)}
+                grid={shareGrid(daily.state)}
+              />
+            }
+          />
+        ) : (
+          <div className="stack">
+            {/* A day played before its pairs were kept: the ten pairs, then the score. */}
+            {played ? <Recap state={played} /> : null}
+            <DailyPending status={daily.status} error={daily.error} game="higher-lower" played={daily.played} />
+          </div>
+        )}
+      </GameShell>
+    );
+  }
+
   return (
     <GameShell
       game={meta}
       dataNote={<RosterNote />}
+      daily={dailyShell}
       toolbar={
         game ? (
           <button type="button" className="icon-btn" onClick={() => setGame(null)}>
@@ -376,10 +441,149 @@ function Board({
 }
 
 /**
+ * The daily's board: the ten pairs one after another. A pair answered stays up
+ * for a beat with its number showing, green or red, then the next comes; a
+ * wrong answer does not end the day. The row of squares above is how it is
+ * going, the one the Share button posts.
+ */
+function DailyBoard({
+  state,
+  onAnswer,
+  end,
+}: {
+  state: DailyState;
+  onAnswer: (answer: Answer) => void;
+  /** The day's result and Share, shown once the ten are answered. */
+  end: ReactNode;
+}) {
+  const total = pairsIn(state);
+  const done = dailyFinished(state);
+  /** The pair just answered, held on screen for a beat. */
+  const [holding, setHolding] = useState<number | null>(null);
+  useEffect(() => {
+    if (holding === null) return;
+    const timer = window.setTimeout(() => setHolding(null), 1100);
+    return () => window.clearTimeout(timer);
+  }, [holding]);
+
+  const index = holding ?? Math.min(state.answers.length, total - 1);
+  const revealed = holding !== null || done;
+  const current = state.chain[index];
+  const challenger = state.chain[index + 1];
+  const categoryMeta = CATEGORIES.find((c) => c.id === state.category)!;
+  const pair = { current, challenger, category: state.category };
+
+  const choose = (given: Answer) => {
+    if (revealed) return;
+    setHolding(index);
+    onAnswer(given);
+  };
+
+  return (
+    <div className="stack">
+      <div className="stats">
+        <Stat label="Pair" value={`${index + 1}/${total}`} />
+        <Stat label="Right" value={scoreOf(state)} />
+      </div>
+
+      <div className="hl-prompt">
+        <span className="chip chip--primary">{categoryMeta.title}</span>
+      </div>
+
+      <div className="hl-progress" aria-label={`${state.answers.length} of ${total} answered`}>
+        {Array.from({ length: total }, (_, i) => (
+          <span
+            key={i}
+            className={`hl-progress__dot${i < state.answers.length ? (rightAt(state, i) ? ' hl-progress__dot--right' : ' hl-progress__dot--wrong') : ''}${i === index ? ' hl-progress__dot--current' : ''}`}
+          />
+        ))}
+      </div>
+
+      <div className="hl-board">
+        <PlayerPanel player={current} category={state.category} value={displayValue(current, state.category)} />
+        <div className="hl-vs" aria-hidden="true">
+          VS
+        </div>
+        <PlayerPanel
+          player={challenger}
+          category={state.category}
+          value={revealed ? displayValue(challenger, state.category) : null}
+          countUp={revealed ? countUpFor(challenger, state.category) : null}
+          tone={revealed ? (rightAt(state, index) ? 'right' : 'wrong') : undefined}
+        />
+      </div>
+
+      {done ? (
+        <div className="stack">
+          <Recap state={state} />
+          {end}
+        </div>
+      ) : (
+        <div className="stack-sm">
+          <div className="hl-answers">
+            <button type="button" className="btn btn--lg hl-answer" disabled={revealed} onClick={() => choose('higher')}>
+              {state.category === 'age' ? '▲ Older' : '▲ Higher'}
+            </button>
+            {hasEqualButton(state.category) ? (
+              <button type="button" className="btn btn--lg hl-answer" disabled={revealed} onClick={() => choose('equal')}>
+                = Equal
+              </button>
+            ) : null}
+            <button type="button" className="btn btn--lg hl-answer" disabled={revealed} onClick={() => choose('lower')}>
+              {state.category === 'age' ? '▼ Younger' : '▼ Lower'}
+            </button>
+          </div>
+          {revealed && !rightAt(state, index) ? (
+            <p className="small center" style={{ margin: 0 }}>
+              It was <strong>{answerLabel(state.category, truthAt(state, index))}</strong> — on to the next pair.
+            </p>
+          ) : null}
+        </div>
+      )}
+
+      {!done ? <p className="tiny faint center">{promptFor(pair, null)}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * The day's ten pairs with both numbers, and how each was answered: the end of
+ * a daily, and the whole puzzle for a day played before its pairs were kept.
+ */
+function Recap({ state }: { state: DailyState }) {
+  return (
+    <section className="card stack-sm">
+      <div className="card__title">The ten pairs</div>
+      <ol className="hl-recap list-reset">
+        {state.chain.slice(1).map((hidden, i) => {
+          const shown = state.chain[i];
+          const given = state.answers[i];
+          const mark = given === undefined ? '' : rightAt(state, i) ? '🟩' : '🟥';
+          return (
+            <li key={hidden.id} className="hl-recap__row small">
+              <span className="hl-recap__mark" aria-hidden="true">
+                {mark || `${i + 1}.`}
+              </span>
+              <span>
+                <strong>{hidden.name}</strong> {displayValue(hidden, state.category)}{' '}
+                <span className="faint">
+                  — {truthAt(state, i) === 'equal' ? 'level with' : `${answerLabel(state.category, truthAt(state, i))} than`}{' '}
+                  {shown.name}, {displayValue(shown, state.category)}
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
+/**
  * The question under the board, in each category's own words. Only FNCS Wins
  * is ever dealt a tie, so only its question mentions one.
  */
-function promptFor(game: GameState, eventLabel: string | null): string {
+function promptFor(game: Pick<GameState, 'current' | 'challenger' | 'category'>, eventLabel: string | null): string {
   const hidden = game.challenger.name;
   const shown = game.current.name;
   switch (game.category) {

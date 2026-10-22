@@ -86,6 +86,15 @@ function onStatus(board: Board): boolean {
   return /(^|[-:])active([-:]|$)/.test(board.id);
 }
 
+/** Whether a board about players names any of `players`. */
+function namesAny(board: Board, players: ReadonlySet<string>): boolean {
+  return (
+    players.size > 0 &&
+    board.entity === 'player' &&
+    board.rows.some((row) => membersOf(row).some((member) => players.has(member.key)))
+  );
+}
+
 /** Whether the board is about players people know: six of the ten rows hold one (`daily/fame.ts`). */
 function famousEnough(board: Board, known: ReadonlySet<string>): boolean {
   if (board.entity !== 'player') return true;
@@ -127,11 +136,15 @@ export function pickDaily(
   const byId = new Map(all.map((board) => [board.id, board]));
   // A follower board is famous by what it ranks, so it skips the fame test — but
   // only the big ones: the world, Europe, North America, the FNCS champions.
-  const offered = all.filter((board) =>
+  const fits = all.filter((board) =>
     board.group === SOCIAL_GROUP
       ? DAILY_SOCIAL(board.id)
       : kindOf(board) !== null && !teamBoard(board) && !onStatus(board) && famousEnough(board, known),
   );
+  // Nobody in two games on one day: a board naming another game's player waits,
+  // unless every board does.
+  const clear = fits.filter((board) => !namesAny(board, ctx.taken));
+  const offered = clear.length ? clear : fits;
   const rng = ctx.rng('tenaball');
   const sigs = new Map(offered.map((board) => [board.id, boardSig(board)]));
   const uses = ctx.recent('tenaball').map(({ daysAgo, puzzle }) => ({ daysAgo, id: puzzle.board, sig: puzzle.sig }));

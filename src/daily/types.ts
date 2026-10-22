@@ -14,24 +14,55 @@ import type { RosterPlayer } from '@/data/liquipedia/roster';
  * from the descriptor (`games/<game>/daily.ts`).
  */
 
-/** The games with a daily puzzle built. Higher or Lower stays an endless run. */
-export const DAILY_GAMES = ['wordle', 'career-path', 'who-are-ya', 'tenaball', 'list', 'tic-tac-toe'] as const;
+/**
+ * The games with a daily puzzle built. Higher or Lower's was built on 22 Oct
+ * 2026 as ten fixed pairs (`higher-lower/daily.ts`), and is not served yet.
+ */
+export const DAILY_GAMES = ['wordle', 'career-path', 'who-are-ya', 'tenaball', 'list', 'tic-tac-toe', 'higher-lower'] as const;
 
 export type DailyGame = (typeof DAILY_GAMES)[number];
 
 /**
  * The ones served as a daily: made each day, played once a day on the live
  * site, listed under "Today's puzzles". The rest keep their daily code but play
- * unlimited, setup screens and all, like Higher or Lower — Career Path, Who Are
- * Ya? and Tic Tac Toe (the user, 4 Oct 2026: "having who are ya and career path
- * unlimited for now", "tic tac toe maybe unlimited as well"), and Fortnitedle
- * from 5 Oct 2026 — or are hidden: List, back in about a month. Add a game here to make it a daily again; days
- * the schedule editor already made ahead have no puzzle for it, so draw one
- * with New there.
+ * unlimited, setup screens and all: Tic Tac Toe (Box Fight), Higher or Lower
+ * (the user, 22 Oct 2026: "do it unlimited for now"), and List, which is
+ * hidden. Tenite was the only daily from 5 Oct 2026; on 22 Oct the user made
+ * Fortnitedle, Career Path and Ready Up dailies again ("every game that is
+ * there public except of tic tac toe").
+ *
+ * In the order a day is made: Tenite's board first, then the three secret
+ * players, then Higher or Lower's pairs once it is served, each clear of every
+ * player the ones before it use (`DailyContext.taken`), so nobody is in two
+ * games on one day.
  */
-export const LIVE_DAILY: readonly DailyGame[] = ['tenaball'];
+export const LIVE_DAILY: readonly DailyGame[] = ['tenaball', 'wordle', 'career-path', 'who-are-ya'];
 
 export const isLiveDaily = (game: string): game is DailyGame => (LIVE_DAILY as readonly string[]).includes(game);
+
+/**
+ * Each daily's first day, its puzzle #1. Tenite has run since the dailies
+ * began; the four that joined on 22 Oct 2026 start on Monday 19 Oct, so they
+ * have an archive from their first day too (the user: "from this monday so from
+ * 19th october"). A day before a game's start has no puzzle for it; the server
+ * fills in the days from it to today the first time each is asked for
+ * (`dailySet` in `server/index.ts`). A game added to `LIVE_DAILY` later wants
+ * its own first day here, or the server fills its archive in from this one.
+ */
+export const DAILY_FROM: Readonly<Record<DailyGame, string>> = {
+  tenaball: '2026-10-05',
+  wordle: '2026-10-19',
+  'career-path': '2026-10-19',
+  'who-are-ya': '2026-10-19',
+  'higher-lower': '2026-10-19',
+  list: '2026-10-05',
+  'tic-tac-toe': '2026-10-05',
+};
+
+/** The live dailies with a puzzle on `day`: those that had started by then. */
+export function gamesOn(day: string): DailyGame[] {
+  return LIVE_DAILY.filter((game) => DAILY_FROM[game] <= day);
+}
 
 export interface DailyPuzzles {
   wordle: { secret: string };
@@ -50,7 +81,17 @@ export interface DailyPuzzles {
   tenaball: { board: string; sig?: string; frozen?: Board };
   list: { list: string; sig?: string };
   'tic-tac-toe': { rows: string[]; cols: string[] };
+  /**
+   * Ten pairs in one category: `players` in the order they come, the first one
+   * shown and each of the rest the next challenger. `frozen` is each player's
+   * number in the category, pinned on the day like Tenite's board, so a data
+   * update cannot turn round a pair already played.
+   */
+  'higher-lower': { category: DailyCategory; players: string[]; frozen?: number[] };
 }
+
+/** Higher or Lower's daily categories: the three the game offers. */
+export type DailyCategory = 'age' | 'earnings' | 'fncsWins';
 
 export interface DailySet {
   /** The day, "YYYY-MM-DD" in Central European time (`day.ts`). */
@@ -60,11 +101,19 @@ export interface DailySet {
    * needs was absent — and its page says so instead of inventing a puzzle.
    */
   puzzles: Partial<DailyPuzzles>;
+  /**
+   * The games whose puzzle was added once the day was over: a daily's first
+   * days, filled in for its archive (`DAILY_FROM`). Only the archive can have
+   * played those, so the schedule editor may still change them, where a puzzle
+   * served on its own day is what people played and stays.
+   */
+  late?: DailyGame[];
 }
 
-/** Whether a day served on or after its date still has a board to pin (`freezeDay`). */
+/** Whether a day served on or after its date still has a puzzle to pin (`freezeDay`). */
 export function unfrozen(set: DailySet): boolean {
-  return Boolean(set.puzzles.tenaball && !set.puzzles.tenaball.frozen);
+  const { tenaball, 'higher-lower': pairs } = set.puzzles;
+  return Boolean((tenaball && !tenaball.frozen) || (pairs && !pairs.frozen));
 }
 
 /**
@@ -102,6 +151,12 @@ export interface DailyContext {
    * past while anyone else is left.
    */
   pickPlayer: (game: DailyGame, pool: readonly RosterPlayer[]) => RosterPlayer | null;
+  /**
+   * Every player already in another game that day: a secret, a name on
+   * Tenite's board, one of Higher or Lower's pairs. A puzzle uses none of them,
+   * so nobody is in two games on one day (the user, 22 Oct 2026).
+   */
+  taken: ReadonlySet<string>;
   /**
    * This game's descriptors on the days around this one, nearest first, with how
    * many days away each is — before or after, for a schedule made ahead.

@@ -731,6 +731,31 @@ export function nextRound(state: GameState): GameState {
 }
 
 /**
+ * A run played out perfectly for `rounds` rounds: the players in the order
+ * they come, the first one shown and each of the rest the next challenger.
+ * The daily puzzle is one of these, dealt once on the server, so it keeps
+ * everything the pairing promises — names you know first, the gaps closing,
+ * the answer drawn before the player. Null if the pool runs dry first.
+ */
+export function dealChain(
+  players: readonly RosterPlayer[],
+  category: Category,
+  difficulty: Difficulty,
+  rounds: number,
+  seed: string,
+): RosterPlayer[] | null {
+  let state = createGame(players, category, difficulty, seed);
+  if (!state) return null;
+  const chain = [state.current, state.challenger];
+  while (chain.length <= rounds) {
+    state = nextRound(submitAnswer(state, correctAnswer(state)));
+    if (state.status !== 'playing') return null;
+    chain.push(state.challenger);
+  }
+  return chain;
+}
+
+/**
  * The run as the analytics record it.
  *
  * `cleared` is its own outcome: the pool ran dry, which is a win. A game over

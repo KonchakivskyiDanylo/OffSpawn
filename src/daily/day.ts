@@ -1,3 +1,5 @@
+import { DAILY_FROM, type DailyGame } from './types';
+
 /**
  * Which day it is, for the daily puzzles.
  *
@@ -14,8 +16,9 @@
 export const DAILY_TZ = 'Europe/Berlin';
 
 /**
- * The first daily puzzle, #1. Every later day counts from it, so the number in
- * a shared result means the same puzzle to everyone who reads it.
+ * The first day of the dailies: Tenite's puzzle #1. Each game counts its own
+ * puzzles from its own first day (`DAILY_FROM`), so the number in a shared
+ * result means the same puzzle to everyone who reads it.
  */
 export const DAILY_START = '2026-10-05';
 
@@ -83,14 +86,17 @@ export function msUntilNextDay(now: number = Date.now()): number {
   return startOf(addDays(dayKey(now), 1)) - now;
 }
 
-/** The puzzle's number: #1 on `DAILY_START`. Zero or below before the launch. */
-export function puzzleNumber(day: string): number {
-  return daysBetween(DAILY_START, day) + 1;
+/**
+ * A game's puzzle number for a day: #1 on its first day (`DAILY_FROM`), or on
+ * `DAILY_START` without a game. Zero or below before it starts.
+ */
+export function puzzleNumber(day: string, game?: DailyGame): number {
+  return daysBetween(game ? DAILY_FROM[game] : DAILY_START, day) + 1;
 }
 
-/** The day of puzzle #`number`. */
-export function puzzleDay(number: number): string {
-  return addDays(DAILY_START, number - 1);
+/** The day of a game's puzzle #`number`. */
+export function puzzleDay(number: number, game?: DailyGame): string {
+  return addDays(game ? DAILY_FROM[game] : DAILY_START, number - 1);
 }
 
 /** "Tue 6 Oct" — a day as the archive names it. */

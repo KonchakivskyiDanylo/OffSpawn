@@ -28,8 +28,8 @@ export function GameShell({
   game: GameMeta;
   /**
    * The game's daily state: on with today's number, or off (practice, on a dev
-   * server only). Absent for a game with no daily puzzle — Higher or Lower —
-   * and ignored for one whose daily is not served now (`LIVE_DAILY`), so it
+   * server only). Absent for a game with no daily puzzle, and ignored for one
+   * whose daily is not served now (`LIVE_DAILY`), so it
    * gets no chip and no toggle either.
    */
   daily?: { on: boolean; number: number; setOn: (on: boolean) => void };
@@ -49,7 +49,7 @@ export function GameShell({
   children: ReactNode;
 }) {
   const daily = isLiveDaily(game.id) ? dailyProp : undefined;
-  const puzzle = usePuzzleDay();
+  const puzzle = usePuzzleDay(isLiveDaily(game.id) ? game.id : undefined);
   const seenKey = `seen-rules:${game.id}`;
   const [showRules, setShowRules] = useState(() => !readLocal(seenKey, false));
 

@@ -47,7 +47,7 @@ import { SOCIAL_GROUP, socialBoards } from './social-boards';
 import { recordBoards } from './record-boards';
 import { winnerBoards } from './winner-boards';
 import { useSocials } from '@/data/useSocials';
-import { poolRankings } from './pool-boards';
+import { fieldBoards, poolRankings } from './pool-boards';
 import './tenaball.css';
 
 const meta = getGame('tenaball')!;
@@ -211,6 +211,9 @@ function Game({
         generated: rankings.generated,
         slots: rankings.slots,
         boards: [
+          // The 2026 Solo FNCS field first, a heading of its own while the event
+          // is the news (`FIELD_POOLS`).
+          ...fieldBoards(pools, roster, facts, orgs),
           ...rankings.boards,
           ...globalsBoards(majors, roster),
           ...derivedBoards(roster.players),
@@ -219,7 +222,7 @@ function Game({
         ],
         tournaments: rankings.tournaments,
       }),
-    [rankings, roster, socials, majors, facts],
+    [rankings, roster, socials, majors, facts, pools, orgs],
   );
 
   const active = derived ?? allTime;

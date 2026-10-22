@@ -2,7 +2,7 @@ import type { Facts } from '@/data/liquipedia/facts';
 import type { Board } from '@/data/liquipedia/rankings';
 import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
 import { money, monthYear } from '@/lib/format';
-import { board, byValue, NEEDED, SLOTS, TIE_EARNINGS, TIE_GROUP_EARNINGS, type Ranked } from './board-builder';
+import { board, byValue, NEEDED, SLOTS, tieText, type Ranked } from './board-builder';
 import { dayNumber, FNCS_WINNERS_GROUP, fncsRegion, fncsWins, TIE_FIRST, TIE_LAST } from './winner-boards';
 
 /**
@@ -99,9 +99,10 @@ export function recordBoards(facts: Facts, roster: Roster): Board[] {
   // ---------------------------------------------------------- longest roads --
   const road = [...winsBy].map(([id, dates]) => {
     const finals = regionalBefore(id, dates[0]);
-    return row(id, finals, `${finals} final${finals === 1 ? '' : 's'}`);
+    // Level roads go to whoever won more once the wait was over.
+    return { ...row(id, finals, `${finals} final${finals === 1 ? '' : 's'}`), tiebreak: [dates.length, player(id).earnings] };
   });
-  push(board('fncs-long-road', FNCS_WINNERS_GROUP, 'Top 10 most FNCS grand finals before a first win', 'player', `Grand finals played before their first FNCS win. ${TIE_EARNINGS}`, byValue(road)));
+  push(board('fncs-long-road', FNCS_WINNERS_GROUP, 'Top 10 most FNCS grand finals before a first win', 'player', `Grand finals played before their first FNCS win. ${tieText('more FNCS titles in all')}`, byValue(road)));
   const waits = [...winsBy]
     .filter(([, dates]) => dates.length >= 2)
     .map(([id, dates]) => {
@@ -226,9 +227,9 @@ export function recordBoards(facts: Facts, roster: Roster): Board[] {
       run = round.some((event) => played.has(event.index)) ? run + 1 : 0;
       best = Math.max(best, run);
     }
-    return best >= 2 ? [row(p.id, best, `${best} in a row`)] : [];
+    return best >= 2 ? [{ ...row(p.id, best, `${best} in a row`), tiebreak: [facts.podiumsAt(p.id), p.earnings] }] : [];
   });
-  push(board('fncs-in-a-row', FNCS_WINNERS_GROUP, 'Top 10 most FNCS grand finals in a row', 'player', `Rounds of grand finals in a row, in any region. ${TIE_EARNINGS}`, byValue(streaks)));
+  push(board('fncs-in-a-row', FNCS_WINNERS_GROUP, 'Top 10 most FNCS grand finals in a row', 'player', `Rounds of grand finals in a row, in any region. ${tieText('more FNCS podiums')}`, byValue(streaks)));
 
   // Major titles in a row, beside "Top 10 by consecutive FNCS titles" from the
   // notebook: the Globals and the LANs are majors and not FNCS rounds, so
@@ -236,7 +237,14 @@ export function recordBoards(facts: Facts, roster: Roster): Board[] {
   // 15 Oct 2026). A winner with no page as long a run as the 11th's would hide
   // a place: no board.
   const majorRuns = [...facts.majorWinRuns].filter(([, run]) => run >= 2);
-  const majorRanked = byValue(majorRuns.filter(([id]) => onRoster(id)).map(([id, run]) => row(id, run, `${run} titles in a row`)));
+  const majorRanked = byValue(
+    majorRuns
+      .filter(([id]) => onRoster(id))
+      .map(([id, run]) => ({
+        ...row(id, run, `${run} titles in a row`),
+        tiebreak: [facts.of(id).wins.major, facts.podiumsAt(id, () => true), player(id).earnings],
+      })),
+  );
   if (majorRanked.length >= NEEDED && !majorRuns.some(([id, run]) => !onRoster(id) && run >= majorRanked[SLOTS].value)) {
     push(
       board(
@@ -244,7 +252,7 @@ export function recordBoards(facts: Facts, roster: Roster): Board[] {
         'Players',
         'Top 10 by consecutive major titles',
         'player',
-        `Majors won one after another. Every round of the FNCS is one major, and so is each Globals and major LAN, so losing the Globals between two FNCS wins ends the run; a LAN they were not at is passed over. ${TIE_EARNINGS}`,
+        `Majors won one after another. Every round of the FNCS is one major, and so is each Globals and major LAN, so losing the Globals between two FNCS wins ends the run; a LAN they were not at is passed over. ${tieText('more major titles in all', 'more podiums at majors')}`,
         majorRanked,
       ),
     );
@@ -300,9 +308,21 @@ export function recordBoards(facts: Facts, roster: Roster): Board[] {
     label: country,
     value: ids.length,
     display: `${ids.length} winner${ids.length === 1 ? '' : 's'}`,
-    tiebreak: ids.reduce((sum, id) => sum + player(id).earnings, 0),
+    tiebreak: [
+      ids.reduce((sum, id) => sum + (winsBy.get(id)?.length ?? 0), 0),
+      ids.reduce((sum, id) => sum + player(id).earnings, 0),
+    ],
   }));
-  push(board('countries-fncs-winners', 'Countries', 'Top 10 countries by different FNCS winners', 'country', TIE_GROUP_EARNINGS, byValue(countryRows)));
+  push(
+    board(
+      'countries-fncs-winners',
+      'Countries',
+      'Top 10 countries by different FNCS winners',
+      'country',
+      'Countries level on winners are ranked by the FNCS titles those players won between them, then by their combined career earnings.',
+      byValue(countryRows),
+    ),
+  );
 
   // ------------------------------------------------------------ birth years --
   const born = new Map<number, RosterPlayer[]>();
