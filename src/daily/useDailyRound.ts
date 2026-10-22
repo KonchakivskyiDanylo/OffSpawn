@@ -4,7 +4,7 @@ import { useLocalState } from '@/lib/storage';
 import { useDailySet } from './client';
 import { DAILY_START, puzzleNumber } from './day';
 import { logResult, readLog, savedRound, saveRound } from './progress';
-import { DAILY_FROM, isLiveDaily, type DailyGame, type DailyPuzzles, type DailyResult } from './types';
+import { DAILY_FROM, isDailyOn, type DailyGame, type DailyPuzzles, type DailyResult } from './types';
 import { usePuzzleDay, useToday } from './useDay';
 
 /**
@@ -28,7 +28,8 @@ export function usePlayMode(game?: DailyGame): [daily: boolean, setDaily: (daily
   const today = useToday();
   const set = useCallback((daily: boolean) => setMode(daily ? 'daily' : 'practice'), [setMode]);
   const on = DEV_TOGGLE ? mode === 'daily' : today >= (game ? DAILY_FROM[game] : DAILY_START);
-  return [on && (game === undefined || isLiveDaily(game)), set];
+  // A game before its first daily plays unlimited, on a dev server too (`?day=` to look ahead).
+  return [on && (game === undefined || isDailyOn(game, today)), set];
 }
 
 export type DailyStatus = 'off' | 'loading' | 'ready' | 'missing' | 'error' | 'played';

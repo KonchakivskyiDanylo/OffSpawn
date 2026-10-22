@@ -137,7 +137,12 @@ export function eventFamily(name: string): EventFamily {
  * stays out of the top 25 nine times in ten; at 3 it was one in six.
  */
 export const DEFAULT_WEIGHTS: Weights = {
-  teammates: 5,
+  // 5.5 and age 1 were the user's from the lab (22 Oct 2026: "played together
+  // 5.5 and age 1 is a great improvement"). Measured over the Easy secrets: the
+  // partner at a secret's latest final from #23.4 to #19.8 on average, strangers
+  // in a top 10 from 75 to 58, same-age strangers from 21 to 10; the famous top
+  // 10s barely move.
+  teammates: 5.5,
   // Results together (22 Oct 2026) grades what "teamed up lately" only
   // counted, so it takes its place; big events together give it some of theirs.
   results: 4,
@@ -146,7 +151,7 @@ export const DEFAULT_WEIGHTS: Weights = {
   champions: 5,
   stage: 3,
   country: 2,
-  age: 1.5,
+  age: 1,
   region: 1,
   linked: 1,
   era: 1.5,
@@ -691,6 +696,14 @@ function compare(
     orgs: Math.min(1, sharedOrgs / 2),
     fncs: Math.max(0, 1 - Math.abs(player.fncsWins - target.player.fncsWins) / 5),
   };
+}
+
+/** Warm to cold by rank, for the guess rows and the daily's share grid. Bands sized for a ranking of ~5,700. */
+export function bandOf(rank: number): 'hot' | 'warm' | 'cool' | 'cold' {
+  if (rank <= 25) return 'hot';
+  if (rank <= 150) return 'warm';
+  if (rank <= 750) return 'cool';
+  return 'cold';
 }
 
 /** Who can be the secret: someone with a teammate, so the biggest part has something to say. */

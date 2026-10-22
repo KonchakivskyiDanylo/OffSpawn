@@ -3,8 +3,8 @@ import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams 
 import { useOpen } from '@/analytics/client';
 import type { GameId } from '@/analytics/types';
 import { Layout } from '@/components/Layout';
-import { isLiveDaily } from '@/daily/types';
-import { PUZZLE_PARAM } from '@/daily/useDay';
+import { isDailyOn } from '@/daily/types';
+import { PUZZLE_PARAM, useToday } from '@/daily/useDay';
 import { usePlayMode } from '@/daily/useDailyRound';
 import { getGame, OPEN_HIDDEN } from '@/games/registry';
 import { gameMeta, HOME_META, NOT_FOUND_META, usePageMeta } from '@/lib/seo';
@@ -34,7 +34,8 @@ function GamePage() {
   // Counted here, before the game's data loads, so someone who leaves while it
   // loads is still an open.
   const [siteDaily] = usePlayMode();
-  useOpen(game ? (game.id as GameId) : null, siteDaily && isLiveDaily(game?.id ?? ''));
+  const today = useToday();
+  useOpen(game ? (game.id as GameId) : null, siteDaily && isDailyOn(game?.id ?? '', today));
   // Another day from the archive is a fresh game: nothing typed or picked on one day carries to the next.
   const [params] = useSearchParams();
   const { search } = useLocation();

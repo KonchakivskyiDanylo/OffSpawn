@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { sendStart, useRoundRecorder } from '@/analytics/client';
+import { DailyEnd, DailyPending } from '@/components/DailyEnd';
 import { GameShell } from '@/components/GameShell';
 import { GiveUpButton } from '@/components/GiveUpButton';
 import { LiquipediaGate, RosterNote } from '@/components/LiquipediaGate';
@@ -18,11 +19,13 @@ import { useOrgs } from '@/data/liquipedia/useOrgs';
 import { usePools } from '@/data/liquipedia/usePools';
 import { useRoster } from '@/data/liquipedia/useRoster';
 import { useTeammates } from '@/data/liquipedia/useTeammates';
+import { useDailyRound, usePlayMode } from '@/daily/useDailyRound';
 import { getGame } from '@/games/registry';
 import { dealFresh, LEVEL_LABEL, levelPlayers, type Level } from '@/games/shared/levels';
 import { plural } from '@/lib/format';
 import {
   ATTRIBUTES,
+  bandOf,
   createGame,
   DEFAULT_EVENT_WEIGHTS,
   DEFAULT_HALF_LIFE,
@@ -38,6 +41,7 @@ import {
   type Scored,
   type Weights,
 } from './engine';
+import { restoreDaily, result as dailyResult, shareGrid, snapshot as dailySnapshot } from './daily';
 import { Knobs } from './Knobs';
 import './contextinho.css';
 
@@ -74,14 +78,6 @@ export default function ContextinhoGame() {
   );
 }
 
-/** Warm to cold by rank. Bands sized for a ranking of ~5,700. */
-function band(rank: number): 'hot' | 'warm' | 'cool' | 'cold' {
-  if (rank <= 25) return 'hot';
-  if (rank <= 150) return 'warm';
-  if (rank <= 750) return 'cool';
-  return 'cold';
-}
-
 function Game({
   roster,
   teammates,
@@ -97,7 +93,20 @@ function Game({
 }) {
   const { pools } = usePools();
   const [level, setLevel] = useState<Level>('easy');
-  const [game, setGame] = useState<GameState | null>(null);
+  const [practice, setPractice] = useState<GameState | null>(null);
+  // The daily from 26 Oct 2026 (`DAILY_FROM`): one secret for everyone; unlimited before it.
+  const [dailyOn, setDailyOn] = usePlayMode('contextinho');
+  const byId = useMemo(() => new Map(roster.players.map((player) => [player.id, player])), [roster]);
+  const daily = useDailyRound('contextinho', {
+    on: dailyOn,
+    ready: true,
+    restore: (puzzle, saved) => restoreDaily(puzzle, byId, saved),
+    snapshot: dailySnapshot,
+    finished: (state) => state.status !== 'playing',
+    result: dailyResult,
+  });
+  const game = dailyOn ? daily.state : practice;
+  const setGame = (next: GameState | null) => (dailyOn ? next && daily.setState(next) : setPractice(next));
   const [error, setError] = useState<string | null>(null);
   const [weights, setWeights] = useState<Weights>(DEFAULT_WEIGHTS);
   const [events, setEvents] = useState<EventWeights>(DEFAULT_EVENT_WEIGHTS);
@@ -111,12 +120,13 @@ function Game({
     [game?.secret, roster, weights, events, halfLife, teammates, orgs, facts, majors],
   );
 
-  useRoundRecorder('contextinho', game !== null && game.status !== 'playing', () => ({
+  useRoundRecorder('contextinho', dailyOn ? daily.endedHere : game !== null && game.status !== 'playing', () => ({
     title: `Contextinho — ${game!.secret.name}`,
     data: teammates.generated,
-    setup: { level },
+    setup: dailyOn ? { daily: daily.day } : { level },
     ...roundRecord(game!),
   }));
+  const shell = { game: meta, dataNote: <RosterNote />, daily: { on: dailyOn, number: daily.number, setOn: setDailyOn } };
 
   const start = useCallback(() => {
     const pick = dealFresh(meta.id, [level], levelPlayers(roster, level, eligible(teammates)));
@@ -126,12 +136,25 @@ function Game({
     }
     setError(null);
     sendStart('contextinho', false);
-    setGame(createGame(pick));
+    setPractice(createGame(pick));
   }, [roster, teammates, level]);
+
+  if (dailyOn && (!game || !ranking)) {
+    const played = daily.status === 'played' ? daily.answers : null;
+    return (
+      <GameShell {...shell}>
+        <div className="stack">
+          {/* A day played before its round was kept: who the secret was, then the score. */}
+          {played ? <SecretCard player={played.secret} /> : null}
+          <DailyPending status={daily.status} error={daily.error} game="contextinho" played={daily.played} />
+        </div>
+      </GameShell>
+    );
+  }
 
   if (!game || !ranking) {
     return (
-      <GameShell game={meta}>
+      <GameShell {...shell}>
         <div className="stack">
           <LevelSetup pools={pools} event={null} levels={LEVELS} value={level} onChange={setLevel} onStart={start} />
           {error ? (
@@ -155,17 +178,18 @@ function Game({
 
   return (
     <GameShell
-      game={meta}
-      dataNote={<RosterNote />}
+      {...shell}
       toolbar={
-        <>
-          <button type="button" className="icon-btn" onClick={start}>
-            ↺ New player
-          </button>
-          <button type="button" className="icon-btn" onClick={() => setGame(null)}>
-            ⚙ Setup
-          </button>
-        </>
+        dailyOn ? null : (
+          <>
+            <button type="button" className="icon-btn" onClick={start}>
+              ↺ New player
+            </button>
+            <button type="button" className="icon-btn" onClick={() => setPractice(null)}>
+              ⚙ Setup
+            </button>
+          </>
+        )
       }
     >
       <div className="stack cx-play">
@@ -245,7 +269,15 @@ function Game({
           </section>
         ) : null}
 
-        {finished ? (
+        {finished && dailyOn ? (
+          <DailyEnd
+            game="contextinho"
+            number={daily.number}
+            day={daily.day}
+            result={dailyResult(game)}
+            grid={shareGrid(game, ranking)}
+          />
+        ) : finished ? (
           <button type="button" className="btn btn--primary btn--lg btn--block" onClick={start}>
             Next player
           </button>
@@ -289,7 +321,7 @@ function GuessRow({
   // How full the bar is: rank on a log scale, so #10 and #100 look different
   // and #3,000 and #5,000 do not.
   const fill = secret ? 1 : Math.max(0.03, 1 - Math.log(entry.rank) / Math.log(everyone));
-  const tone = secret ? 'win' : band(entry.rank);
+  const tone = secret ? 'win' : bandOf(entry.rank);
   return (
     <div
       className={`cx-row cx-row--${tone}${isLatest ? ' cx-row--latest' : ''}`}

@@ -6,6 +6,7 @@ import { loadRoster, type Roster, type RosterPlayer } from '@/data/liquipedia/ro
 import { loadTeammates, type Teammates } from '@/data/liquipedia/teammates';
 import type { Socials } from '@/data/socials';
 import { pickDaily as careerPath } from '@/games/career-path/daily';
+import { pickDaily as contextinho } from '@/games/contextinho/daily';
 import { freezeDaily as freezePairs, pickDaily as higherLower } from '@/games/higher-lower/daily';
 import { buildCriteria } from '@/games/list/criteria';
 import { pickDaily as list } from '@/games/list/daily';
@@ -64,8 +65,8 @@ export const DAILY_MIX: Readonly<Record<'easy' | 'medium', number>> = { easy: 0.
  */
 const SECRET_REST = [Infinity, 180, 60, 14, 0];
 
-/** The games whose puzzle is one secret player. */
-export const SECRET_GAMES: readonly DailyGame[] = ['wordle', 'career-path', 'who-are-ya'];
+/** The games whose puzzle is one secret player: the "solo player games" that never share an answer on one day. */
+export const SECRET_GAMES: readonly DailyGame[] = ['wordle', 'career-path', 'who-are-ya', 'contextinho'];
 
 /**
  * The player a puzzle is about, by id: the secret of a one-player game, and
@@ -168,6 +169,7 @@ export function pickPuzzle<G extends DailyGame>(game: G, data: DailyData, ctx: D
     list: () => list(roster, buildCriteria(roster, facts, null, orgs, teammates, socials), ctx),
     'tic-tac-toe': () => ticTacToe(roster, facts, orgs, socials, ctx),
     'higher-lower': () => higherLower(roster, ctx),
+    contextinho: () => contextinho(roster, teammates, majors, facts, ctx),
   };
   return made[game]() as DailyPuzzles[G] | null;
 }

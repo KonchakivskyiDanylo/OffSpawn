@@ -688,15 +688,29 @@ export const GAMES: GameMeta[] = [
     slug: 'contextinho',
     title: 'Contextinho',
     tagline: 'Every guess gets a rank. How close are you to the secret player?',
+    seo: {
+      title: 'Contextinho: find the secret Fortnite pro by how close your guesses are',
+      description:
+        'Guess any competitive Fortnite player and see how close they are to the secret one — teammates, rivals, country, era — ranked out of every pro on record.',
+    },
     icon: '🌡️',
     intro: [
       'Find the secret player. Every guess gets a rank: how close that player is to the secret one, out of everyone on record. #1 is the answer.',
-      'Close means alike. Teammates rank highest — above all a title or a big LAN won together, and recent ones most — then the same majors, years and organisations, nationality (nearby countries count partly), age and region.',
+      'Close means alike. Teammates rank highest — above all a title or a big LAN won together, and good finishes together, recent ones most — then rivals at the top of the same finals, the 2018 Skirmishes for the players of that era, the same years and organisations, nationality (nearby countries count partly), age and region.',
     ],
     rules: ['Guesses are unlimited.', 'A hint names a player halfway between your best guess and #1.'],
+    // Public from 22 Oct 2026, a daily from 26 Oct (`DAILY_FROM`).
+    daily: {
+      rules: [
+        'One secret player a day, the same for everyone: a name a follower of the scene knows.',
+        'Guesses are unlimited; your score is how many it took.',
+        'A hint names a player halfway between your best guess and #1. It counts as a guess.',
+      ],
+    },
     sections: [
       {
         title: 'Difficulty',
+        practiceOnly: true,
         items: [
           'Easy 🟢 — the secret is a name everyone knows.',
           'Medium 🟡 — a regular of the scene.',
@@ -705,7 +719,6 @@ export const GAMES: GameMeta[] = [
       },
     ],
     terms: ['teammates', 'fncs-title', 'lan', 'major', 'org', 'nationality', 'region', 'age'],
-    hidden: true,
     Component: lazy(() => import('./contextinho/ContextinhoGame')),
   },
   {

@@ -1,7 +1,7 @@
 # OffSpawn — competitive Fortnite puzzles
 
-Browser puzzle games built around competitive Fortnite players — ten built,
-seven on the site. No accounts and no monetisation: the games run in the browser
+Browser puzzle games built around competitive Fortnite players — nineteen
+built, seven on the site. No accounts and no monetisation: the games run in the browser
 on data from Liquipedia, and a small Node server (`server/index.ts`)
 serves the site and records anonymous round stats and support requests.
 
@@ -21,7 +21,7 @@ npm run dev:all      # the site on http://localhost:5173 and its API on :3000
 | `npm run dev:all` | The site and the API together in one terminal, output tagged `site` / `api`, Ctrl+C stops both. The API runs with `ADMIN_OPEN=1`, so `/analytics` opens without a password, and the site with `VITE_RECORD=1`, so rounds you play land on it (in `server/.data`, this machine only) |
 | `npm run build` | Typecheck + production build to `dist/` |
 | `npm run typecheck` | TypeScript only |
-| `npm run check:games` | Drives all ten games through a full round headlessly. Career Path and Who Are Ya report SKIPPED until their generated files exist |
+| `npm run check:games` | Drives every game, hidden ones included, through a full round headlessly. Career Path and Who Are Ya report SKIPPED until their generated files exist |
 | `npm run api` | The server (`server/`), for the analytics and support endpoints. Run beside `npm run dev`; `/api` is proxied to it |
 | `npm start` | The production server: `dist/` plus the API. What Heroku runs |
 | `npm run check:server` | Starts the server on a spare port with a throwaway store and checks every endpoint |
@@ -174,6 +174,67 @@ big enough is a question about the players a game can actually use — roughly
 half the roster has too little recorded history to be a fair answer. If a tier
 still comes up short, the next-closest tier is folded in rather than failing.
 
+## Tuning Contextinho
+
+Contextinho ranks every player against the secret by a score out of 100: a
+weighted sum of parts, each 0–1 (played together, results together, FNCS wins
+together, rivals at the top of the same finals, the 2018 Skirmishes, country,
+age, region, same years…). The whole formula, part by part, is in
+[PROJECT_GUIDE.md](PROJECT_GUIDE.md), "Contextinho".
+
+**Look before you change.** With `npm run dev:all` running:
+
+- **`http://localhost:5173/analytics/contextinho`** — pick any player and see
+  everyone ranked against them, top 25 to top 1,000, each score split into the
+  parts that made it (in points), with a slider per weight. Δ shows how far a
+  player moved against the defaults; "Where does … rank?" finds anyone. Your
+  sliders stay in the browser; **Copy as code for engine.ts** copies the lines
+  to paste.
+- **From a terminal**, the same as a table, and a weight change against the
+  defaults:
+
+```bash
+npx tsx scripts/contextinho-report.ts MrSavage Mongraal vic0
+npx tsx scripts/contextinho-report.ts --top 25 --set teammates=6,age=1 Kiryache32
+```
+
+**Where to change what** — all in `src/games/contextinho/engine.ts` unless said:
+
+| To change | Edit |
+| --- | --- |
+| How much a part counts | `DEFAULT_WEIGHTS` (or paste from the lab's Copy as code) |
+| How fast old results fade | `DEFAULT_HALF_LIFE` (years to count half) |
+| World Cup / Globals / Invitational / Summit / other LANs inside the big-event parts | `DEFAULT_EVENT_WEIGHTS` |
+| What a finish together is worth | `finishWorth`, `LAN_WORTH`, `RESULTS_FULL` |
+| Rivals at the top of the same finals | `RIVAL_PLACE` (top 10), `RIVALS_FULL` |
+| The early majors' own scale | `earlyFinishWorth`, `EARLY_FULL`, `EARLY_RIVALS_FULL`, `EARLY_FLOOR` |
+| Which events are early majors | `EARLY_SKIP` and the filter beside it in `scripts/pipeline/derived.py` — then rebuild the data (below) |
+| How much unknown players' coincidences count | `BY_CHANCE`, `fameLean` |
+| Which countries count as neighbours | `SCENES`, `SAME_SCENE`, `NEAR`, `FAR_KM` |
+| Age, shared teammates, organisations curves | inside `compare()` |
+| Who can be the daily's secret | `DAILY_MIN_EVENTS` and `dailyPool` in `src/games/contextinho/daily.ts` |
+
+**Check it.**
+
+```bash
+npm run typecheck
+npm run check:games
+```
+
+`check:games` holds the defaults to what was agreed for all 110 famous
+secrets: an FNCS-winning partner in the top 25 (two titles together: top 10),
+a partner at two big events or on a podium in the top 10, a big-event winning
+partner in the top 4, nobody the secret never played with in their top 3, and
+the daily rebuilding and scoring. Its note line reads, for example, "their top
+teammate ranks #2.8 on average, an FNCS-winning partner #4.4 (worst #22)".
+
+After changing which events are early majors (or any of `derived.py`), rebuild
+the data — into a scratch folder first if you want to compare — and check:
+
+```bash
+.venv/Scripts/python scripts/build_data.py --from derived
+```
+
 ## Architecture
 
 Game logic is separated from UI throughout: each game has a pure `engine.ts`
@@ -235,7 +296,7 @@ figure renders as a dash, never a zero — and a player with no published
 birthday is left out of the questions that need one rather than guessed at.
 
 Everything derived from it is derived in one place, the notebook, and read in
-place by the app. `npm run check:games` plays all ten games to completion in
+place by the app. `npm run check:games` plays every game to completion in
 Node and asserts the invariants each one depends on. Details are in
 [DATA.md](DATA.md).
 

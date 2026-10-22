@@ -5,7 +5,7 @@ import { ModePicker } from '@/components/EventMode';
 import { loadDailySet } from '@/daily/client';
 import { DAILY_START } from '@/daily/day';
 import { gameStats, useDailyLogs } from '@/daily/progress';
-import { isLiveDaily, type DailyGame } from '@/daily/types';
+import { isDailyOn, type DailyGame } from '@/daily/types';
 import { useCountdown, useToday } from '@/daily/useDay';
 import { usePlayMode } from '@/daily/useDailyRound';
 import { loadRoster } from '@/data/liquipedia/roster';
@@ -37,7 +37,6 @@ function usePrefetch(today: string, daily: boolean) {
   }, [today, daily]);
 }
 
-const isDaily = (game: GameMeta) => isLiveDaily(game.id);
 const won = (outcome: string) => outcome === 'won' || outcome === 'cleared';
 
 /** "Monday 5 October" — the launch day, for the line on the home page before it. */
@@ -55,6 +54,8 @@ export function Home() {
   const [daily] = usePlayMode();
   usePrefetch(today, daily);
   const countdown = useCountdown();
+  // A game before its first daily is under Unlimited until that day.
+  const isDaily = (game: GameMeta) => isDailyOn(game.id, today);
   const dailies = VISIBLE_GAMES.filter(isDaily);
   const endless = VISIBLE_GAMES.filter((game) => !isDaily(game));
 

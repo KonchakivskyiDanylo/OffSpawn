@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { puzzleLabel, shortDate } from '@/daily/day';
-import { isLiveDaily, type DailyGame } from '@/daily/types';
+import { isDailyOn, isLiveDaily, type DailyGame } from '@/daily/types';
 import { puzzleHref, usePuzzleDay } from '@/daily/useDay';
 import { DEV_TOGGLE } from '@/daily/useDailyRound';
 import { readLocal, writeLocal } from '@/lib/storage';
@@ -48,8 +48,9 @@ export function GameShell({
   examples?: ReactNode;
   children: ReactNode;
 }) {
-  const daily = isLiveDaily(game.id) ? dailyProp : undefined;
   const puzzle = usePuzzleDay(isLiveDaily(game.id) ? game.id : undefined);
+  // No chip and no toggle before the game's first daily: it plays unlimited until then.
+  const daily = isDailyOn(game.id, puzzle.today) ? dailyProp : undefined;
   const seenKey = `seen-rules:${game.id}`;
   const [showRules, setShowRules] = useState(() => !readLocal(seenKey, false));
 

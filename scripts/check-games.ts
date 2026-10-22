@@ -90,6 +90,8 @@ import { knownPlayers } from '@/daily/fame';
 import { freezeDay, generateDaily, missingFrom, playersIn } from '@/daily/generate';
 import { DAILY_FROM, DAILY_GAMES, gamesOn, puzzleId, type DailySet } from '@/daily/types';
 import * as hlDaily from '@/games/higher-lower/daily';
+import * as cxDaily from '@/games/contextinho/daily';
+import { SECRET_GAMES } from '@/daily/generate';
 import * as wordleDaily from '@/games/wordle/daily';
 import * as careerDaily from '@/games/career-path/daily';
 import * as whoDaily from '@/games/who-are-ya/daily';
@@ -3081,7 +3083,30 @@ if (socials.platforms.length > 0) {
 
       // No secret player twice on one day — the one-player games only (Tenite's names do not count).
       const secrets = DAILY_GAMES.flatMap((game) => playersIn(game, p[game]));
-      check(secrets.length === 3 && new Set(secrets).size === secrets.length, `daily ${day}: one player is the secret in two games`);
+      check(
+        secrets.length === SECRET_GAMES.length && new Set(secrets).size === secrets.length,
+        `daily ${day}: one player is the secret in two games`,
+      );
+
+      // Contextinho: a secret with a career on record, a round that comes back
+      // from a save, and the answer guessed first scores one guess, a 🎯.
+      const cx = p.contextinho && cxDaily.restoreDaily(p.contextinho, byId, null);
+      check(
+        Boolean(cx) && majors.resultsFor(cx!.secret.id).length + facts.earlyResultsFor(cx!.secret.id).length >= cxDaily.DAILY_MIN_EVENTS,
+        `daily ${day}: Contextinho did not rebuild, or its secret has too little on record`,
+      );
+      if (cx) {
+        const other = roster.players.find((player) => player.id !== cx.secret.id && player.region === cx.secret.region)!;
+        const once = contextinho.submitGuess(cx, other, true);
+        const back = cxDaily.restoreDaily(p.contextinho!, byId, cxDaily.snapshot(once));
+        check(back?.guesses.length === 1 && back.hints === 1 && back.guesses[0].player.id === other.id, `daily ${day}: a saved Contextinho round did not come back`);
+        const won = contextinho.submitGuess(cx, cx.secret);
+        const ranking = contextinho.rankAll(cx.secret, roster.players, contextinho.DEFAULT_WEIGHTS, { teammates, orgs, facts, majors });
+        check(
+          cxDaily.result(won).score === '1 guess' && cxDaily.shareGrid(won, ranking).join('') === '🎯',
+          `daily ${day}: Contextinho's answer reads ${cxDaily.result(won).score} ${cxDaily.shareGrid(won, ranking).join('/')}`,
+        );
+      }
 
       // Higher or Lower: ten pairs of well-known players that rebuild, play to
       // the end through a wrong answer, come back from a snapshot, and pin.
@@ -3203,8 +3228,8 @@ if (socials.platforms.length > 0) {
         `daily ${later}: pinning a day did not pin both Tenite's board and Higher or Lower's numbers`,
       );
     }
-    const window = (game: 'wordle' | 'career-path' | 'who-are-ya') => history.map((set) => set.puzzles[game]?.secret);
-    const allSecrets = [...window('wordle'), ...window('career-path'), ...window('who-are-ya')];
+    const window = (game: 'wordle' | 'career-path' | 'who-are-ya' | 'contextinho') => history.map((set) => set.puzzles[game]?.secret);
+    const allSecrets = [...window('wordle'), ...window('career-path'), ...window('who-are-ya'), ...window('contextinho')];
     check(new Set(allSecrets).size === allSecrets.length, `daily: a secret player came back within ${DAYS} days`);
     const boards = history.map((set) => set.puzzles.tenaball?.board);
     const listIds = history.map((set) => set.puzzles.list?.list);

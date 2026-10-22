@@ -1,6 +1,7 @@
 import type { Board } from '@/data/liquipedia/rankings';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { puzzleFor as careerPuzzle, dailyPool as careerPool } from '@/games/career-path/daily';
+import { dailyPool as contextinhoPool } from '@/games/contextinho/daily';
 import { DAILY_CATEGORIES, pickDaily as pairsFor } from '@/games/higher-lower/daily';
 import { CATEGORIES } from '@/games/higher-lower/engine';
 import { buildCriteria, type Criterion } from '@/games/list/criteria';
@@ -85,6 +86,7 @@ const NAME: Record<DailyGame, string> = {
   list: 'List',
   'tic-tac-toe': 'Box Fight',
   'higher-lower': 'Higher or Lower',
+  contextinho: 'Contextinho',
 };
 
 const CATEGORY_LABEL = (category: string) => CATEGORIES.find((item) => item.id === category)?.label ?? category;
@@ -301,6 +303,8 @@ export function optionsFor(
         group: `${list.answers.length} answers`,
         used: usesOf('list', list.id, sets, listSig(list), firstEditable).map((use) => ({ ...use, past: use.day < firstEditable })),
       }));
+    case 'contextinho':
+      return players(contextinhoPool(roster, teammates, majors, facts));
     case 'higher-lower':
       // A category: its ten pairs are drawn for it.
       return DAILY_CATEGORIES.map((category) => ({ id: category, label: CATEGORY_LABEL(category), group: 'ten new pairs' }));
@@ -343,6 +347,10 @@ export function puzzleForChoice(
     case 'list': {
       const list = lists.get(id);
       return list ? { list: id, sig: listSig(list) } : null;
+    }
+    case 'contextinho': {
+      const player = byId.get(id);
+      return player && contextinhoPool(data.roster, data.teammates, data.majors, data.facts).includes(player) ? { secret: id } : null;
     }
     case 'higher-lower': {
       if (!DAILY_CATEGORIES.includes(id as DailyCategory)) return null;

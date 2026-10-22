@@ -16,9 +16,19 @@ import type { RosterPlayer } from '@/data/liquipedia/roster';
 
 /**
  * The games with a daily puzzle built. Higher or Lower's was built on 22 Oct
- * 2026 as ten fixed pairs (`higher-lower/daily.ts`), and is not served yet.
+ * 2026 as ten fixed pairs (`higher-lower/daily.ts`), and is not served yet;
+ * Contextinho's the same day, served from 26 Oct.
  */
-export const DAILY_GAMES = ['wordle', 'career-path', 'who-are-ya', 'tenaball', 'list', 'tic-tac-toe', 'higher-lower'] as const;
+export const DAILY_GAMES = [
+  'wordle',
+  'career-path',
+  'who-are-ya',
+  'tenaball',
+  'list',
+  'tic-tac-toe',
+  'higher-lower',
+  'contextinho',
+] as const;
 
 export type DailyGame = (typeof DAILY_GAMES)[number];
 
@@ -29,12 +39,14 @@ export type DailyGame = (typeof DAILY_GAMES)[number];
  * (the user, 22 Oct 2026: "do it unlimited for now"), and List, which is
  * hidden. Tenite was the only daily from 5 Oct 2026; on 22 Oct the user made
  * Fortnitedle, Career Path and Ready Up dailies again ("every game that is
- * there public except of tic tac toe").
+ * there public except of tic tac toe"), and Contextinho public, a daily from
+ * 26 Oct ("add it this game to public also as a daily but daily from 26
+ * october only"). Before its first day a game plays unlimited (`isDailyOn`).
  *
  * In the order a day is made. The three secret players are three different
  * people (`DailyContext.taken`); the other games' players do not count.
  */
-export const LIVE_DAILY: readonly DailyGame[] = ['tenaball', 'wordle', 'career-path', 'who-are-ya'];
+export const LIVE_DAILY: readonly DailyGame[] = ['tenaball', 'wordle', 'career-path', 'who-are-ya', 'contextinho'];
 
 export const isLiveDaily = (game: string): game is DailyGame => (LIVE_DAILY as readonly string[]).includes(game);
 
@@ -53,6 +65,7 @@ export const DAILY_FROM: Readonly<Record<DailyGame, string>> = {
   'career-path': '2026-10-19',
   'who-are-ya': '2026-10-19',
   'higher-lower': '2026-10-19',
+  contextinho: '2026-10-26',
   list: '2026-10-05',
   'tic-tac-toe': '2026-10-05',
 };
@@ -60,6 +73,14 @@ export const DAILY_FROM: Readonly<Record<DailyGame, string>> = {
 /** The live dailies with a puzzle on `day`: those that had started by then. */
 export function gamesOn(day: string): DailyGame[] {
   return LIVE_DAILY.filter((game) => DAILY_FROM[game] <= day);
+}
+
+/**
+ * Whether `game` plays its daily on `day`: served, and started. Before its
+ * first day a game in `LIVE_DAILY` plays unlimited, setup and all.
+ */
+export function isDailyOn(game: string, day: string): game is DailyGame {
+  return isLiveDaily(game) && DAILY_FROM[game] <= day;
 }
 
 export interface DailyPuzzles {
@@ -86,6 +107,8 @@ export interface DailyPuzzles {
    * update cannot turn round a pair already played.
    */
   'higher-lower': { category: DailyCategory; players: string[]; frozen?: number[] };
+  /** The secret player; the ranking is worked out in the browser, on the default weights. */
+  contextinho: { secret: string };
 }
 
 /** Higher or Lower's daily categories: the three the game offers. */
