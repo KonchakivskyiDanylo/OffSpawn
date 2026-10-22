@@ -1,7 +1,7 @@
 import { loadFacts, type Facts } from '@/data/liquipedia/facts';
 import { loadMajors, type Majors } from '@/data/liquipedia/majors';
 import { loadOrgs, type Orgs } from '@/data/liquipedia/orgs';
-import { loadRankings, membersOf, type Board, type Rankings } from '@/data/liquipedia/rankings';
+import { loadRankings, type Rankings } from '@/data/liquipedia/rankings';
 import { loadRoster, type Roster, type RosterPlayer } from '@/data/liquipedia/roster';
 import { loadTeammates, type Teammates } from '@/data/liquipedia/teammates';
 import type { Socials } from '@/data/socials';
@@ -9,7 +9,7 @@ import { pickDaily as careerPath } from '@/games/career-path/daily';
 import { freezeDaily as freezePairs, pickDaily as higherLower } from '@/games/higher-lower/daily';
 import { buildCriteria } from '@/games/list/criteria';
 import { pickDaily as list } from '@/games/list/daily';
-import { dailyBoards, freezeDaily as freezeBoard, pickDaily as tenaball } from '@/games/tenaball/daily';
+import { freezeDaily as freezeBoard, pickDaily as tenaball } from '@/games/tenaball/daily';
 import { pickDaily as ticTacToe } from '@/games/tic-tac-toe/daily';
 import { pickDaily as whoAreYa } from '@/games/who-are-ya/daily';
 import { pickDaily as wordle } from '@/games/wordle/daily';
@@ -67,48 +67,25 @@ const SECRET_REST = [Infinity, 180, 60, 14, 0];
 /** The games whose puzzle is one secret player. */
 export const SECRET_GAMES: readonly DailyGame[] = ['wordle', 'career-path', 'who-are-ya'];
 
-/** Every board a daily can name, by id, built once per data object. */
-const boardsCache = new WeakMap<DailyData, Map<string, Board>>();
-
-function boardsOf(data: DailyData): Map<string, Board> {
-  let found = boardsCache.get(data);
-  if (!found) {
-    const boards = dailyBoards(data.rankings, data.roster, data.socials ?? null, data.majors, data.facts);
-    found = new Map(boards.map((board) => [board.id, board]));
-    boardsCache.set(data, found);
-  }
-  return found;
+/**
+ * The player a puzzle is about, by id: the secret of a one-player game, and
+ * nothing for the rest. Only those count for "nobody in two games on one day"
+ * (the user, 22 Oct 2026: "tenite and other's doesn't matter. Only solo player
+ * games count"), so a Tenite board naming the day's Ready Up answer is fine.
+ */
+export function playersIn(game: DailyGame, puzzle: unknown): string[] {
+  if (!SECRET_GAMES.includes(game)) return [];
+  const secret = (puzzle as { secret?: string } | undefined)?.secret;
+  return secret ? [secret] : [];
 }
 
 /**
- * The players a puzzle puts in front of people, by id: a secret, the names on
- * a Tenite board about players, the players of Higher or Lower's pairs. No
- * other game may use them the same day. A board of countries or organisations
- * has none; neither has a grid or a list, which are not dailies now.
+ * The day's one-player answers, but that of `except` — and of any game not
+ * served that day, like a daily taken back to unlimited, whose puzzle nobody
+ * sees.
  */
-export function playersIn(game: DailyGame, puzzle: unknown, data: DailyData): string[] {
-  if (!puzzle || typeof puzzle !== 'object') return [];
-  const value = puzzle as { secret?: string; players?: string[]; board?: string; frozen?: unknown };
-  if (game === 'higher-lower') return value.players ?? [];
-  if (game === 'tenaball') {
-    const board = (value.frozen as Board | undefined) ?? boardsOf(data).get(value.board ?? '');
-    return board ? boardPlayers(board) : [];
-  }
-  return value.secret ? [value.secret] : [];
-}
-
-/** The players a board names: none on a board of countries, organisations or events. */
-export function boardPlayers(board: Board): string[] {
-  return board.entity === 'player' ? board.rows.flatMap((row) => membersOf(row).map((member) => member.key)) : [];
-}
-
-/**
- * Every player a day's puzzles use, but those of `except` — and of any game
- * not served that day, like a daily taken back to unlimited, whose puzzle
- * nobody sees.
- */
-export function takenOn(set: DailySet, data: DailyData, except?: DailyGame): Set<string> {
-  return new Set(servedIn(set).filter((game) => game !== except).flatMap((game) => playersIn(game, set.puzzles[game], data)));
+export function takenOn(set: DailySet, except?: DailyGame): Set<string> {
+  return new Set(servedIn(set).filter((game) => game !== except).flatMap((game) => playersIn(game, set.puzzles[game])));
 }
 
 /** The games a day has a puzzle for that are served that day. */
@@ -121,8 +98,8 @@ export function servedIn(set: DailySet): DailyGame[] {
  *
  * `others` are the days around it, before or after — a schedule made ahead
  * (the editor on /analytics/daily) has days after this one, and a puzzle should
- * not repeat on either side. `taken` is every player already in a game that
- * day; a picker adds nothing to it, `generateDaily` does. `salt` makes a
+ * not repeat on either side. `taken` is every player already the answer in a
+ * one-player game that day; a picker adds nothing to it, `generateDaily` does. `salt` makes a
  * different draw for the same day, for the editor's "New".
  */
 export function dailyContext(
@@ -211,7 +188,7 @@ function aroundDay(day: string, history: readonly DailySet[]): DailySet[] {
  * built one, to keep them all tested.
  *
  * `kept` is the day as the store already has it: its puzzles stay as they are,
- * and only the games it lacks are made, clear of every player it uses — how a
+ * and only the games it lacks are made, clear of its one-player answers — how a
  * daily that starts later gets its first days filled in.
  */
 export function generateDaily(
@@ -222,7 +199,7 @@ export function generateDaily(
   kept?: DailySet,
 ): DailySet {
   const puzzles: Partial<DailyPuzzles> = { ...kept?.puzzles };
-  const taken = kept ? takenOn(kept, data) : new Set<string>();
+  const taken = kept ? takenOn(kept) : new Set<string>();
   const ctx = dailyContext(day, data, aroundDay(day, history), taken);
   // Each on its own: a game whose data is missing is left out, not the whole day.
   for (const game of games) {
@@ -231,7 +208,7 @@ export function generateDaily(
       const puzzle = pickPuzzle(game, data, ctx);
       if (!puzzle) continue;
       (puzzles as Record<string, unknown>)[game] = puzzle;
-      for (const id of playersIn(game, puzzle, data)) taken.add(id);
+      for (const id of playersIn(game, puzzle)) taken.add(id);
     } catch (error) {
       console.error(`daily ${day}: ${game} failed`, error);
     }

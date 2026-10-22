@@ -99,6 +99,31 @@ interface RawPayload {
   divcups?: DivCupWin[];
   /** Absent from a file written before 14 Oct 2026. */
   million?: { id: string; date: string }[];
+  /** Absent from a file written before 22 Oct 2026. */
+  early?: { events: Omit<EarlyMajor, 'index'>[]; teams: [number, number, string[]][] };
+}
+
+/**
+ * An early major: an Epic main event before the 2019 World Cup, where the
+ * majors begin — the 2018 Summer and Fall Skirmish weeks and their LAN finals,
+ * the Winter Royale finals, the 2019 Secret Skirmish, Katowice Royale and
+ * World Cup Warmup (`early` in `derived.py`). Kept apart from `events`, so
+ * nothing that counts majors counts them; Contextinho scores them on their own.
+ */
+export interface EarlyMajor {
+  name: string;
+  date: string;
+  mode: string | null;
+  region: string | null;
+  lan: boolean;
+  index: number;
+}
+
+/** A player's finish at an early major, and the team they finished with (themselves included). */
+export interface EarlyResult {
+  event: EarlyMajor;
+  placement: number;
+  team: readonly string[];
 }
 
 /** A player's finish at one season event, and who they played it with. */
@@ -208,8 +233,11 @@ export class Facts {
    * $1M, oldest first ("?Name" for a winner with no page); empty before 14 Oct 2026.
    */
   readonly million: readonly { id: string; date: string }[];
+  /** The early majors, oldest first; empty in a file written before 22 Oct 2026. */
+  readonly early: readonly EarlyMajor[];
 
   private readonly byPlayer = new Map<string, PlayerFacts>();
+  private readonly earlyByPlayer = new Map<string, EarlyResult[]>();
   /** event index -> player ids who were there. Built lazily, once. */
   private participants: Map<number, Set<string>> | null = null;
   /** event index -> player ids who won it. Built lazily, once. */
@@ -247,6 +275,22 @@ export class Facts {
     this.lists = payload.lists ?? [];
     this.divcups = payload.divcups ?? [];
     this.million = payload.million ?? [];
+    this.early = (payload.early?.events ?? []).map((event, index) => ({ ...event, index }));
+    for (const [index, placement, team] of payload.early?.teams ?? []) {
+      const event = this.early[index];
+      if (!event) continue;
+      for (const id of team) {
+        const mine = this.earlyByPlayer.get(id);
+        const result = { event, placement, team };
+        if (mine) mine.push(result);
+        else this.earlyByPlayer.set(id, [result]);
+      }
+    }
+  }
+
+  /** A player's results at the early majors, oldest first. */
+  earlyResultsFor(playerId: string): readonly EarlyResult[] {
+    return this.earlyByPlayer.get(playerId) ?? [];
   }
 
   /** This player's facts, or an all-zero record when they have no results. */

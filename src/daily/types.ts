@@ -31,10 +31,8 @@ export type DailyGame = (typeof DAILY_GAMES)[number];
  * Fortnitedle, Career Path and Ready Up dailies again ("every game that is
  * there public except of tic tac toe").
  *
- * In the order a day is made: Tenite's board first, then the three secret
- * players, then Higher or Lower's pairs once it is served, each clear of every
- * player the ones before it use (`DailyContext.taken`), so nobody is in two
- * games on one day.
+ * In the order a day is made. The three secret players are three different
+ * people (`DailyContext.taken`); the other games' players do not count.
  */
 export const LIVE_DAILY: readonly DailyGame[] = ['tenaball', 'wordle', 'career-path', 'who-are-ya'];
 
@@ -101,13 +99,6 @@ export interface DailySet {
    * needs was absent — and its page says so instead of inventing a puzzle.
    */
   puzzles: Partial<DailyPuzzles>;
-  /**
-   * The games whose puzzle was added once the day was over: a daily's first
-   * days, filled in for its archive (`DAILY_FROM`). Only the archive can have
-   * played those, so the schedule editor may still change them, where a puzzle
-   * served on its own day is what people played and stays.
-   */
-  late?: DailyGame[];
 }
 
 /** Whether a day served on or after its date still has a puzzle to pin (`freezeDay`). */
@@ -152,9 +143,9 @@ export interface DailyContext {
    */
   pickPlayer: (game: DailyGame, pool: readonly RosterPlayer[]) => RosterPlayer | null;
   /**
-   * Every player already in another game that day: a secret, a name on
-   * Tenite's board, one of Higher or Lower's pairs. A puzzle uses none of them,
-   * so nobody is in two games on one day (the user, 22 Oct 2026).
+   * The players already the answer in another one-player game that day:
+   * Fortnitedle, Career Path, Ready Up. Tenite's names and anything else do not
+   * count (the user, 22 Oct 2026: "Only solo player games count").
    */
   taken: ReadonlySet<string>;
   /**

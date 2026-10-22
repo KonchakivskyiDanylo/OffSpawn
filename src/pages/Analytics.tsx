@@ -11,6 +11,7 @@ import { Errors, Inbox } from './analytics/Inbox';
 import { Socials } from './analytics/Socials';
 import { Daily } from './analytics/Daily';
 import { Data } from './analytics/Data';
+import { ContextinhoLab } from './analytics/ContextinhoLab';
 import { GridBuilder } from './analytics/GridBuilder';
 import { gameTitle } from './analytics/labels';
 import { Overview } from './analytics/Overview';
@@ -37,6 +38,7 @@ import './analytics.css';
  *   /analytics/socials         the follower counts and the Twitch login
  *   /analytics/data            how old the Liquipedia data is, and Update now
  *   /analytics/grid            build a Tic Tac Toe grid by hand (dev servers only)
+ *   /analytics/contextinho     any player's Contextinho ranking, with the weights (dev servers only)
  *
  * The range and the filters live in the query string and ride along on every
  * link, so they hold while you move between pages.
@@ -142,7 +144,7 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
 
   const fresh = (tickets ?? []).filter((ticket) => ticket.status === 'new').length;
   // The inbox, the daily schedule, the followers and data pages and the grid builder are not filtered by the dashboard's bar.
-  const inbox = /\/analytics\/(support|errors|daily|socials|data|grid)/.test(pathname);
+  const inbox = /\/analytics\/(support|errors|daily|socials|data|grid|contextinho)/.test(pathname);
   const on = (path: string) => ({ pathname: path, search: search ? `?${search}` : '' });
   const tab = ({ isActive }: { isActive: boolean }) => `an-tab${isActive ? ' is-active' : ''}`;
   // The live games first; the hidden ones behind a toggle, unless one is open.
@@ -201,6 +203,11 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
             Grid builder
           </NavLink>
         ) : null}
+        {import.meta.env.DEV ? (
+          <NavLink to={on('/analytics/contextinho')} className={tab}>
+            Contextinho lab
+          </NavLink>
+        ) : null}
         <NavLink to={on('/analytics/support')} className={tab}>
           Support{fresh ? <span className="an-badge">{fresh}</span> : null}
         </NavLink>
@@ -244,6 +251,7 @@ function Pages({ onReload, onOut }: { onReload: () => void; onOut: () => void })
         <Route path="daily" element={<Daily />} />
         <Route path="data" element={<Data />} />
         {import.meta.env.DEV ? <Route path="grid" element={<GridBuilder />} /> : null}
+        {import.meta.env.DEV ? <Route path="contextinho" element={<ContextinhoLab />} /> : null}
         <Route path="*" element={<Navigate to={on('/analytics')} replace />} />
       </Routes>
     </div>

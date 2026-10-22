@@ -212,7 +212,8 @@ try {
   check(daily?.traffic?.totals.opens === 1 && daily.traffic.totals.starts === 1, `the daily filter reads ${JSON.stringify(daily?.traffic?.totals)}`);
 
   // The daily schedule editor: made ahead, two days swapped, a past day
-  // refused, and nobody put in two games on one day.
+  // refused for Tenite and open for a one-player game, and no player the
+  // answer in two one-player games on one day.
   check((await request('/api/admin/daily?days=7')).status === 401, 'the schedule answered without a login');
   const plan = (await request('/api/admin/daily?days=7', {}, cookie)).body as {
     firstEditable: string;
@@ -222,11 +223,10 @@ try {
   check(editable.length === 7, `the schedule has ${editable.length} days ahead, expected 7`);
   if (editable.length >= 2) {
     const [a, b] = editable;
-    // A swap goes through, or is refused because a player would be in two games that day.
     const swap = await post('/api/admin/daily/swap', { game: 'tenaball', a: a.day, b: b.day }, cookie);
-    const clash = (body: unknown) => /that day/.test(String((body as { error?: string })?.error));
-    check(swap.status === 200 || (swap.status === 409 && clash(swap.body)), `a swap was refused (${swap.status})`);
-    if (swap.status === 200) {
+    const clash = (body: unknown) => /answer that day/.test(String((body as { error?: string })?.error));
+    check(swap.status === 204, `a swap was refused (${swap.status})`);
+    if (swap.status === 204) {
       const after = (await request('/api/admin/daily?days=7', {}, cookie)).body as typeof plan;
       const [a2, b2] = after.rows.filter((row) => row.editable.tenaball);
       check(
@@ -238,6 +238,14 @@ try {
       (await post('/api/admin/daily/redraw', { game: 'tenaball', day: '2020-01-01' }, cookie)).status === 400,
       'a day long past was redrawn',
     );
+    // Yesterday: Tenite's is what people played; a one-player game's may still change (`PAST_EDITABLE`).
+    const yesterday = new Date(Date.parse(`${a.day}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+    check(
+      (await post('/api/admin/daily/redraw', { game: 'tenaball', day: yesterday }, cookie)).status === 400,
+      "yesterday's Tenite board was redrawn",
+    );
+    const past = await post('/api/admin/daily/redraw', { game: 'wordle', day: yesterday }, cookie);
+    check(past.status === 204, `yesterday's Fortnitedle could not be redrawn (${past.status})`);
     // The day's Career Path and Ready Up answers cannot be its Fortnitedle answer too.
     const set = (await request(`/api/daily/${a.day}`)).body as { puzzles: Record<string, { secret?: string }> };
     const others = ['career-path', 'who-are-ya'].flatMap((game) => set?.puzzles?.[game]?.secret ?? []);

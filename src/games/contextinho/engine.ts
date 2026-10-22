@@ -18,6 +18,7 @@ import type { Teammates } from '@/data/liquipedia/teammates';
 
 export type AttributeId =
   | 'teammates'
+  | 'results'
   | 'lately'
   | 'titles'
   | 'champions'
@@ -28,6 +29,10 @@ export type AttributeId =
   | 'linked'
   | 'era'
   | 'lobbies'
+  | 'rivals'
+  | 'early'
+  | 'earlyRivals'
+  | 'earlyLobbies'
   | 'earnings'
   | 'orgs'
   | 'fncs';
@@ -41,6 +46,11 @@ export interface Attribute {
 
 export const ATTRIBUTES: Attribute[] = [
   { id: 'teammates', label: 'Played together', hint: 'Tournaments entered as teammates, on a log scale: 40 or more is a full match.' },
+  {
+    id: 'results',
+    label: 'Results together',
+    hint: 'FNCS grand finals and major LANs played on one team, each worth more the better the finish — a win 1, a podium 0.8, top 5 0.65, top 10 0.5, top 25 0.3, anything else 0.15 — twice at a LAN, and faded by the recency half-life: 3 is a full match.',
+  },
   { id: 'lately', label: 'Teamed up lately', hint: 'FNCS grand finals and major LANs played as teammates, each faded by the recency half-life: three this year is a full match.' },
   { id: 'titles', label: 'FNCS wins together', hint: 'Regional FNCS finals won on the same team: one scores 0.7, two or more a full match.' },
   { id: 'champions', label: 'Won a big event together', hint: 'Won the World Cup, a Global Championship or another major LAN on the same team: 1 for each, times the event’s weight below.' },
@@ -49,9 +59,33 @@ export const ATTRIBUTES: Attribute[] = [
   { id: 'age', label: 'Age', hint: 'Birth dates two years apart score a third; unknown scores 0.3.' },
   { id: 'region', label: 'Region', hint: 'Same competitive region.' },
   { id: 'linked', label: 'Shared teammates', hint: 'Overlap between the two players’ top-50 teammate lists.' },
-  { id: 'era', label: 'Same years', hint: 'Overlap between the years each earned prize money.' },
+  {
+    id: 'era',
+    label: 'Same years',
+    hint: 'The years each earned prize money, weighed by how much (on a log scale): two players big in the same years match fully; $50 in a year someone else won $100K in barely counts.',
+  },
   { id: 'lobbies', label: 'Same tournaments', hint: 'FNCS grand finals and LANs both played, out of the shorter career (counted as at least 10).' },
+  {
+    id: 'rivals',
+    label: 'Top of the same lobbies',
+    hint: 'FNCS grand finals and LANs where both finished in the top 10, on different teams: eight is a full match.',
+  },
   { id: 'earnings', label: 'Career earnings', hint: 'A tenfold gap in career earnings scores half.' },
+  {
+    id: 'early',
+    label: 'Early majors together',
+    hint: 'The 2018–19 Skirmishes and the rest of the early majors played on one team, by finish — a win 1, a podium 0.8, top 10 0.55, top 25 0.3, anything else 0.15 — twice at a LAN, never faded: 2 is a full match.',
+  },
+  {
+    id: 'earlyRivals',
+    label: 'Top of the same early lobbies',
+    hint: 'Early majors where both finished in the top 10, on different teams: three is a full match.',
+  },
+  {
+    id: 'earlyLobbies',
+    label: 'Same early majors',
+    hint: 'Early majors both played, out of the shorter early career (counted as at least 5).',
+  },
   { id: 'orgs', label: 'Same organisations', hint: 'Organisations both have played for; two in common is a full match.' },
   { id: 'fncs', label: 'FNCS wins', hint: 'Five titles apart scores 0.' },
 ];
@@ -104,16 +138,25 @@ export function eventFamily(name: string): EventFamily {
  */
 export const DEFAULT_WEIGHTS: Weights = {
   teammates: 5,
-  lately: 3,
+  // Results together (22 Oct 2026) grades what "teamed up lately" only
+  // counted, so it takes its place; big events together give it some of theirs.
+  results: 4,
+  lately: 0,
   titles: 4,
   champions: 5,
-  stage: 4,
+  stage: 3,
   country: 2,
   age: 1.5,
   region: 1,
   linked: 1,
-  era: 2,
-  lobbies: 1.5,
+  era: 1.5,
+  lobbies: 1,
+  // The top of the same finals: the rivals a fan names, which shared lobbies alone could not tell from the regulars.
+  rivals: 1.5,
+  // The early majors, 2018 to the World Cup (22 Oct 2026), on a scale of their own.
+  early: 3,
+  earlyRivals: 1.5,
+  earlyLobbies: 1,
   earnings: 0,
   orgs: 2,
   fncs: 0,
@@ -182,8 +225,109 @@ function titlesWith(playerId: string, context: Context): Map<string, number> {
   return out;
 }
 
+/**
+ * What a finish together is worth in "results together" (the user, 22 Oct
+ * 2026: "It's not only about wins, but placements as well. Like top 10, top 5
+ * is a great placements sometimes"): a title the most, then the podium, a top
+ * 5, a top 10, a top 25, and a final simply played together a little.
+ */
+export function finishWorth(placement: number): number {
+  if (placement === 1) return 1;
+  if (placement <= 3) return 0.8;
+  if (placement <= 5) return 0.65;
+  if (placement <= 10) return 0.5;
+  if (placement <= 25) return 0.3;
+  return 0.15;
+}
+
+/** A LAN result together counts this many times a regional final's. */
+const LAN_WORTH = 2;
+
+/** The sum of finishes together that makes a full "results together": a podium, a top 5 and a top 10 between them. */
+const RESULTS_FULL = 3;
+
+/**
+ * Every FNCS grand final and major LAN played on one team, each worth its
+ * finish (`finishWorth`), twice at a LAN, faded by its age. It folds in what
+ * "teamed up lately" counted — a final together, faded — and grades it by how
+ * it went, so a duo who were top 5 three times stands above one who were 80th.
+ */
+function resultsWith(playerId: string, context: Context): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!context.majors) return out;
+  const fade = fader(context);
+  const lans = new Set(context.facts?.events.filter((event) => event.lan).map((event) => event.name) ?? []);
+  for (const result of context.majors.resultsFor(playerId)) {
+    const team = context.majors.finishers(result);
+    if (team.size > (TEAM_SIZE[result.tournament.mode ?? ''] ?? 1)) continue;
+    const worth = finishWorth(result.placement) * (lans.has(result.tournament.name) ? LAN_WORTH : 1) * fade(result.tournament.date);
+    for (const id of team) if (id !== playerId) out.set(id, (out.get(id) ?? 0) + worth);
+  }
+  return out;
+}
+
+/**
+ * "Same years", weighed by money (22 Oct 2026): each year's prize money on a
+ * log scale, the smaller of the two over the larger, summed over the years.
+ * A plain overlap of years tied a 2018 star to everyone who won $50 that year
+ * — 7ssk7's top 10 was Swedes and Russians whose one thing in common with him
+ * was earning something in 2018 and 2019.
+ */
+function sameYears(a: Readonly<Record<string, number>>, b: Readonly<Record<string, number>>): number {
+  let low = 0;
+  let high = 0;
+  for (const year of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const [x, y] = [Math.log10(1 + (a[year] ?? 0)), Math.log10(1 + (b[year] ?? 0))];
+    low += Math.min(x, y);
+    high += Math.max(x, y);
+  }
+  return high > 0 ? low / high : 0;
+}
+
+/** The best finishes that count in "top of the same lobbies". */
+const RIVAL_PLACE = 10;
+
+/** How many grand finals or LANs both in the top 10 make a full "top of the same lobbies": eight, so a top player's rivals are not all full at once. */
+const RIVALS_FULL = 8;
+
 /** How many finals or major LANs together make a full "teamed up lately". */
 const LATELY_FULL = 3;
+
+/**
+ * The early majors (`Facts.early`: the 2018 Summer and Fall Skirmishes, the
+ * Winter Royale finals, the 2019 Secret Skirmish, Katowice Royale and World Cup
+ * Warmup) on a scale of their own (the user, 22 Oct 2026: "Include skirmishes
+ * in like old majors, so they have completely different scoring"). They are
+ * not faded: they are the whole career of a 2018 player, and fading by the
+ * half-life would leave a seventh of them. A 100-player Skirmish lobby makes a
+ * top 10 rarer than a modern final's, so it is worth a little more.
+ */
+export function earlyFinishWorth(placement: number): number {
+  if (placement === 1) return 1;
+  if (placement <= 3) return 0.8;
+  if (placement <= 10) return 0.55;
+  if (placement <= 25) return 0.3;
+  return 0.15;
+}
+
+/** What makes a full "early majors together": a podium and a top 10 between them, or one LAN top 10. */
+const EARLY_FULL = 2;
+
+/** Early majors both in the top 10 that make a full "top of the same early lobbies". */
+const EARLY_RIVALS_FULL = 3;
+
+/** The shortest early career "same early majors" divides by. */
+const EARLY_FLOOR = 5;
+
+/** Every early major played on one team, by finish, twice at a LAN. */
+function earlyWith(playerId: string, context: Context): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const result of context.facts?.earlyResultsFor(playerId) ?? []) {
+    const worth = earlyFinishWorth(result.placement) * (result.event.lan ? LAN_WORTH : 1);
+    for (const id of result.team) if (id !== playerId) out.set(id, (out.get(id) ?? 0) + worth);
+  }
+  return out;
+}
 
 /** Every FNCS grand final and major LAN played as teammates, each faded by its age. */
 function latelyWith(playerId: string, context: Context): Map<string, number> {
@@ -393,19 +537,60 @@ const LOBBY_FLOOR = 10;
 
 /** Everything about the secret the parts compare against, worked out once per ranking. */
 function profile(player: RosterPlayer, context: Context, orgsOf: (id: string) => ReadonlySet<string>) {
-  const events = new Set((context.majors?.resultsFor(player.id) ?? []).map((result) => result.tournament.name));
+  const results = context.majors?.resultsFor(player.id) ?? [];
+  const events = new Set(results.map((result) => result.tournament.name));
   return {
     player,
     born: player.birthDate ? Date.parse(player.birthDate) : NaN,
     mates: new Map(context.teammates.matesOf(player.id)),
     mateIds: new Set(context.teammates.matesOf(player.id).map(([id]) => id)),
     titles: titlesWith(player.id, context),
+    results: resultsWith(player.id, context),
+    /** Each final and LAN the secret finished in the top 10 of, and where. */
+    early: earlyWith(player.id, context),
+    /** Each early major the secret played, and where they finished. */
+    earlyPlaces: new Map((context.facts?.earlyResultsFor(player.id) ?? []).map((result) => [result.event.index, result.placement])),
+    topTen: new Map(results.filter((result) => result.placement <= RIVAL_PLACE).map((result) => [result.tournament.name, result.placement])),
     lately: latelyWith(player.id, context),
     stage: stageMates(player.id, context),
-    years: new Set(Object.keys(player.earningsByYear)),
+    years: player.earningsByYear,
     events,
     orgs: orgsOf(player.id),
   };
+}
+
+/**
+ * The parts any two players can share without ever meeting: an age, a
+ * region, the same years. Between strangers they are coincidences, and a top
+ * 10 made of them was a list of names nobody would guess — 7ssk7's was Swedes
+ * born the same year who earned in 2018 too. So they count fully for a player
+ * with $1M or more, and less the less a player has won (`fameLean`). A country
+ * is not one of them: a guesser thinks by nationality, so a compatriot nobody
+ * knows stays a compatriot. Everything the two did together, or at the same
+ * events, counts in full.
+ */
+const BY_CHANCE: ReadonlySet<AttributeId> = new Set(['age', 'region', 'era']);
+
+/** How much of the chance parts count for a player: 1 from $1M, about 0.6 at $10K, 0.4 at $1K or less. */
+export function fameLean(player: RosterPlayer): number {
+  const fame = Math.min(1, Math.max(0, (Math.log10(player.earnings + 1) - 3) / 3));
+  return 0.4 + 0.6 * fame;
+}
+
+/**
+ * What a player's score is made of: each part's share, in points out of 100,
+ * with the fame lean on the chance parts — the same sum `rankAll` scores by,
+ * so the points add up to the score. For the lab and the report script.
+ */
+export function pointsOf(scored: Scored, weights: Weights): Parts {
+  const total = Object.values(weights).reduce((sum, weight) => sum + Math.max(0, weight), 0) || 1;
+  const lean = fameLean(scored.player);
+  return Object.fromEntries(
+    ATTRIBUTES.map((attribute) => [
+      attribute.id,
+      (Math.max(0, weights[attribute.id]) * scored.parts[attribute.id] * (BY_CHANCE.has(attribute.id) ? lean : 1) * 100) / total,
+    ]),
+  ) as Parts;
 }
 
 /**
@@ -434,8 +619,10 @@ export function rankAll(
     .filter((player) => player.id !== secret.id)
     .map((player) => {
       const parts = compare(target, player, context, orgsOf);
+      // What two strangers can share by chance counts more for a name a fan could guess.
+      const lean = fameLean(player);
       const sum = (Object.keys(parts) as AttributeId[]).reduce(
-        (acc, id) => acc + Math.max(0, weights[id]) * parts[id],
+        (acc, id) => acc + Math.max(0, weights[id]) * parts[id] * (BY_CHANCE.has(id) ? lean : 1),
         0,
       );
       return { player, value: sum / total, parts };
@@ -472,8 +659,20 @@ function compare(
   const sharedOrgs = [...orgsOf(player.id)].filter((org) => target.orgs.has(org)).length;
   const theirEvents = context.majors?.resultsFor(player.id) ?? [];
   const sharedEvents = theirEvents.filter((result) => target.events.has(result.tournament.name)).length;
+  // Both in the top 10 of one final, on different teams: a placement apart.
+  const theirEarly = context.facts?.earlyResultsFor(player.id) ?? [];
+  const sharedEarly = theirEarly.filter((result) => target.earlyPlaces.has(result.event.index));
+  const earlyRivalries = sharedEarly.filter((result) => {
+    const theirs = target.earlyPlaces.get(result.event.index)!;
+    return theirs <= RIVAL_PLACE && result.placement <= RIVAL_PLACE && result.placement !== theirs;
+  }).length;
+  const rivalries = theirEvents.filter((result) => {
+    const theirs = target.topTen.get(result.tournament.name);
+    return theirs !== undefined && result.placement <= RIVAL_PLACE && result.placement !== theirs;
+  }).length;
   return {
     teammates: Math.min(1, Math.log1p(together) / Math.log1p(40)),
+    results: Math.min(1, (target.results.get(player.id) ?? 0) / RESULTS_FULL),
     lately: Math.min(1, (target.lately.get(player.id) ?? 0) / LATELY_FULL),
     titles: onceOrTwice(target.titles.get(player.id) ?? 0),
     champions: target.stage.won.get(player.id) ?? 0,
@@ -482,8 +681,12 @@ function compare(
     age,
     region: player.region !== null && player.region === target.player.region ? 1 : 0,
     linked: Math.min(1, jaccard(target.mateIds, theirMates) * 3),
-    era: jaccard(target.years, new Set(Object.keys(player.earningsByYear))),
+    era: sameYears(target.years, player.earningsByYear),
     lobbies: sharedEvents / Math.max(LOBBY_FLOOR, Math.min(target.events.size, theirEvents.length)),
+    rivals: Math.min(1, rivalries / RIVALS_FULL),
+    early: Math.min(1, (target.early.get(player.id) ?? 0) / EARLY_FULL),
+    earlyRivals: Math.min(1, earlyRivalries / EARLY_RIVALS_FULL),
+    earlyLobbies: sharedEarly.length / Math.max(EARLY_FLOOR, Math.min(target.earlyPlaces.size, theirEarly.length)),
     earnings: Math.max(0, 1 - earningsGap / 2),
     orgs: Math.min(1, sharedOrgs / 2),
     fncs: Math.max(0, 1 - Math.abs(player.fncsWins - target.player.fncsWins) / 5),

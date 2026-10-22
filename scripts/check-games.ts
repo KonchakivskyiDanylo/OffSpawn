@@ -88,7 +88,7 @@ import * as dailyProgress from '@/daily/progress';
 import { clueGrid, clueResult, snapClues } from '@/daily/clue-round';
 import { knownPlayers } from '@/daily/fame';
 import { freezeDay, generateDaily, missingFrom, playersIn } from '@/daily/generate';
-import { DAILY_FROM, DAILY_GAMES, gamesOn, puzzleId, type DailyGame, type DailySet } from '@/daily/types';
+import { DAILY_FROM, DAILY_GAMES, gamesOn, puzzleId, type DailySet } from '@/daily/types';
 import * as hlDaily from '@/games/higher-lower/daily';
 import * as wordleDaily from '@/games/wordle/daily';
 import * as careerDaily from '@/games/career-path/daily';
@@ -3079,22 +3079,9 @@ if (socials.platforms.length > 0) {
       const wy = p['who-are-ya'] && whoDaily.restoreDaily(p['who-are-ya'], teammates, byId, null);
       check(Boolean(wy) && wy!.clues.map((c) => c.player.id).join('|') === p['who-are-ya']!.clues.join('|'), `daily ${day}: Who Are Ya did not rebuild its clues`);
 
-      // No secret player twice on one day.
-      const secrets = [p.wordle?.secret, p['career-path']?.secret, p['who-are-ya']?.secret].filter(Boolean);
-      check(new Set(secrets).size === secrets.length, `daily ${day}: one player is the secret in two games`);
-      // Nor anyone in two games at all: a secret, a name on Tenite's board, a player in Higher or Lower's pairs.
-      {
-        const owner = new Map<string, DailyGame>();
-        const twice: string[] = [];
-        for (const game of DAILY_GAMES) {
-          for (const id of playersIn(game, p[game], data)) {
-            const was = owner.get(id);
-            if (was && was !== game) twice.push(`${id} in ${was} and ${game}`);
-            else owner.set(id, game);
-          }
-        }
-        check(twice.length === 0, `daily ${day}: a player is in two games — ${twice.slice(0, 3).join('; ')}`);
-      }
+      // No secret player twice on one day — the one-player games only (Tenite's names do not count).
+      const secrets = DAILY_GAMES.flatMap((game) => playersIn(game, p[game]));
+      check(secrets.length === 3 && new Set(secrets).size === secrets.length, `daily ${day}: one player is the secret in two games`);
 
       // Higher or Lower: ten pairs of well-known players that rebuild, play to
       // the end through a wrong answer, come back from a snapshot, and pin.
@@ -3201,7 +3188,7 @@ if (socials.platforms.length > 0) {
       const kept = generateDaily(later, data, history, ['tenaball']);
       const filled = generateDaily(later, data, history, missingFrom(kept), kept);
       const live = gamesOn(later);
-      const owners = live.flatMap((game) => playersIn(game, filled.puzzles[game], data));
+      const owners = live.flatMap((game) => playersIn(game, filled.puzzles[game]));
       check(
         puzzleId(filled.puzzles.tenaball) === puzzleId(kept.puzzles.tenaball) &&
           live.every((game) => filled.puzzles[game]) &&

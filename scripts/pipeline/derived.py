@@ -651,15 +651,16 @@ def build(BASE):
         board(bid, group, title, 'player', tie, ranked, average, lower=True,
               members_of=team_members if size else None)
 
-    def avg_scope(year, server, lans, mode=None):
+    def avg_scope(year, server, lans, mode=None, skip=()):
         """One board's slots - [(mode, events)] - the events that put an entrant
-        on it, and how many rounds of FNCS finals are among the slots."""
+        on it, and how many rounds of FNCS finals are among the slots. Rounds
+        played in a format in `skip` are left out."""
         slots = []
         for y, m, by_server in ROUNDS:
             if year is not None and y != year:
                 continue
             events = by_server.get(server, []) if server else [n for ns in by_server.values() for n in ns]
-            if events and (mode is None or m == mode):
+            if events and (mode is None or m == mode) and m not in skip:
                 slots.append((m, events))
         k = len(slots)
         home = {n for _, events in slots for n in events}
@@ -674,30 +675,43 @@ def build(BASE):
         group = f'{year} season'
         round_modes = Counter(m for y, m, _ in ROUNDS if y == year)
         team_mode = round_modes.most_common(1)[0][0] if year >= 2022 else None
+        # A year of one team format with a round of another - the 2026 Solo
+        # FNCS among the duo Majors - gets its player boards twice (the user,
+        # 22 Oct 2026: "let's have 2 without solos and with"): on their own ids
+        # without that round, so a player who never tried to qualify for it is
+        # not counted as missing it, and again with it, a missed final at its
+        # own format's miss. The team boards never had it: a solo final has no duos.
+        odd = tuple(sorted(m for m in round_modes if team_mode and m and m != team_mode))
+        odd_name = ' and the '.join(f'{m} FNCS' for m in odd)
         for prefix, lans in (('season', YEAR_LANS[year]), ('fncs-avg', [])):
             if prefix == 'season' and not lans:
                 continue
             for size in [None] + ([TEAM_SIZE[team_mode]] if team_mode in TEAM_SIZE else []):
                 mode = team_mode if size else None
-                for server in [None] + SERVERS:
-                    slots, home, k = avg_scope(year, server, lans, mode)
-                    if not k:
-                        continue        # no final in this region that year
-                    if any(m not in MISSED for m, _ in slots):
-                        print(f'  averages: {year} {server or "world"} has a format with no '
-                              f'missed value: {sorted({m for m, _ in slots} - set(MISSED), key=str)}')
-                        continue
-                    who = MODE_WORD[mode] if size else 'players'
-                    title = (f'Top 10 {who} of {year}' if prefix == 'season' else
-                             f"Top 10 {'' if not size else who + ' '}by average FNCS finish in {year}")
-                    bid = ':'.join([prefix, str(year)] + ([who] if size else [])
-                                   + ([server] if server else [] if size else ['world']))
-                    before = len(boards)
-                    peak = {}
-                    avg_board(bid, group, title + (f' — {server}' if server else ''),
-                              avg_tie(slots, lans, k, server, f'of {year}', size),
-                              average_finish(slots, home, size, peak=peak), size, peak)
-                    avg_built[prefix] += len(boards) - before
+                for skip in ([odd, ()] if odd and not size else [()]):
+                    for server in [None] + SERVERS:
+                        slots, home, k = avg_scope(year, server, lans, mode, skip)
+                        if not k:
+                            continue        # no final in this region that year
+                        if any(m not in MISSED for m, _ in slots):
+                            print(f'  averages: {year} {server or "world"} has a format with no '
+                                  f'missed value: {sorted({m for m, _ in slots} - set(MISSED), key=str)}')
+                            continue
+                        who = MODE_WORD[mode] if size else 'players'
+                        title = (f'Top 10 {who} of {year}' if prefix == 'season' else
+                                 f"Top 10 {'' if not size else who + ' '}by average FNCS finish in {year}")
+                        split = odd and not size
+                        if split:
+                            title += f' without the {odd_name}' if skip else f' with the {odd_name}'
+                        with_odd = ['with-' + '-'.join(MODE_WORD[m] for m in odd)] if split and not skip else []
+                        bid = ':'.join([prefix, str(year)] + with_odd + ([who] if size else [])
+                                       + ([server] if server else [] if size else ['world']))
+                        before = len(boards)
+                        peak = {}
+                        avg_board(bid, group, title + (f' — {server}' if server else ''),
+                                  avg_tie(slots, lans, k, server, f'of {year}', size),
+                                  average_finish(slots, home, size, peak=peak), size, peak)
+                        avg_built[prefix] += len(boards) - before
 
     # All time: every round of FNCS finals, misses counted from 2019 for
     # everyone - nobody knows when a player started trying to qualify.
@@ -2093,11 +2107,44 @@ def build(BASE):
         f"{len(SEASON_EVENTS)} events"
     )
 
+    # `early`: the majors before the majors (the user, 22 Oct 2026: "Include
+    # skirmishes in like old majors, so they have completely different
+    # scoring"). Every Epic main event before the 2019 World Cup, where
+    # `MAJORS` begins: the 2018 Summer and Fall Skirmish weeks and their LAN
+    # finals at PAX and TwitchCon, the Winter Royale finals, then 2019's Secret
+    # Skirmish, Katowice Royale and World Cup Warmup. Left out: the Trials and
+    # the TwitchCon heats (qualifying rounds), the Fall Skirmish standings page
+    # (a series, not a lobby), console, mobile, and the summer 2019 cash cups.
+    # Each team's finish, as `season` writes them; Contextinho scores them on
+    # their own (`games/contextinho/engine.ts`).
+    EARLY_SKIP = re.compile(r"trial|heat|series|cash cup|xbox|console|mobile", re.I)
+    early_names = sorted(
+        (t["name"] for t in tournaments
+         if is_epic(t) and (t.get("startdate") or "") < "2019-07-26"
+         and t.get("liquipediatier") in (1, 2) and t.get("liquipediatiertype") is None
+         and not EARLY_SKIP.search(t["name"])),
+        key=lambda n: (tour_of[n].get("startdate") or "", n),
+    )
+    early_index = {n: i for i, n in enumerate(early_names)}
+    early_teams = sorted(
+        {(early_index[t["name"]], r, tuple(sorted(page for page, _team in pages)))
+         for t, r, _money, pages in PLACED if t["name"] in early_index and r is not None}
+    )
+    early = {
+        "events": [
+            {"name": n, "date": str(tour_of[n].get("startdate") or "")[:10], "mode": tour_of[n].get("mode"),
+             "region": tour_of[n].get("region"), "lan": tour_of[n].get("type") == "Offline"}
+            for n in early_names
+        ],
+        "teams": [[i, r, list(ids)] for i, r, ids in early_teams],
+    }
+    print(f"  early majors: {len(early_names)} events, {len(early_teams)} team results")
+
     # `lists`: List's Div Cup and Evaluation lists, finished in cell 2.
     # `divcups`: every Div Cup final won, for Tenite's first and last boards.
     # `million`: the day each player's results first reached $1M.
     payload = {"generated": TODAY, "events": events, "players": players_out, "season": season,
-               "lists": PLAYER_LISTS, "divcups": DIVCUP_WINS, "million": MILLION}
+               "lists": PLAYER_LISTS, "divcups": DIVCUP_WINS, "million": MILLION, "early": early}
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, separators=(",", ":"))
 

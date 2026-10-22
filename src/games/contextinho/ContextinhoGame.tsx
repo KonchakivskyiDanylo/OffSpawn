@@ -27,19 +27,18 @@ import {
   DEFAULT_EVENT_WEIGHTS,
   DEFAULT_HALF_LIFE,
   DEFAULT_WEIGHTS,
-  EVENT_FAMILIES,
   eligible,
   giveUp,
   hintFor,
   rankAll,
   record as roundRecord,
   submitGuess,
-  type AttributeId,
   type EventWeights,
   type GameState,
   type Scored,
   type Weights,
 } from './engine';
+import { Knobs } from './Knobs';
 import './contextinho.css';
 
 const meta = getGame('contextinho')!;
@@ -349,7 +348,6 @@ function Lab({
   peek: boolean;
   onPeek: (next: boolean) => void;
 }) {
-  const set = (id: AttributeId, value: number) => onWeights({ ...weights, [id]: value });
   return (
     <details className="card cx-lab">
       <summary className="card__title" style={{ marginBottom: 0, cursor: 'pointer' }}>
@@ -357,55 +355,16 @@ function Lab({
       </summary>
       <div className="stack" style={{ marginTop: 12 }}>
         <p className="tiny faint" style={{ margin: 0 }}>
-          Each part scores 0–1 against the secret; the weights below mix them. Changing one re-ranks everyone at once.
+          Any player’s whole ranking, with every score taken apart: <a href="/analytics/contextinho">/analytics/contextinho</a>.
         </p>
-        <div className="cx-weights">
-          {ATTRIBUTES.map((attribute) => (
-            <label key={attribute.id} className="cx-weight" title={attribute.hint}>
-              <span className="cx-weight__label">
-                {attribute.label} <strong>{weights[attribute.id]}</strong>
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={6}
-                step={0.5}
-                value={weights[attribute.id]}
-                onChange={(event) => set(attribute.id, Number(event.target.value))}
-              />
-              <span className="tiny faint">{attribute.hint}</span>
-            </label>
-          ))}
-        </div>
-        <label className="cx-weight">
-          <span className="cx-weight__label">
-            Recency half-life <strong>{halfLife > 0 ? `${halfLife} years` : 'off'}</strong>
-          </span>
-          <input type="range" min={0} max={10} step={0.5} value={halfLife} onChange={(event) => onHalfLife(Number(event.target.value))} />
-          <span className="tiny faint">
-            How fast titles, big events and “teamed up lately” fade: a result this many years old counts half. 0 is no fading.
-          </span>
-        </label>
-        <p className="tiny faint" style={{ margin: 0 }}>
-          Big events, each weighted inside the two parts about them: 1 as it stands, 2 twice that, 0 left out.
-        </p>
-        <div className="cx-weights">
-          {EVENT_FAMILIES.map((family) => (
-            <label key={family.id} className="cx-weight">
-              <span className="cx-weight__label">
-                {family.label} <strong>{events[family.id]}</strong>
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={3}
-                step={0.5}
-                value={events[family.id]}
-                onChange={(event) => onEvents({ ...events, [family.id]: Number(event.target.value) })}
-              />
-            </label>
-          ))}
-        </div>
+        <Knobs
+          weights={weights}
+          onWeights={onWeights}
+          events={events}
+          onEvents={onEvents}
+          halfLife={halfLife}
+          onHalfLife={onHalfLife}
+        />
         <div className="row">
           <div className="difficulty-switch">
             <button type="button" className="difficulty-switch__btn" aria-pressed={display === 'rank'} onClick={() => onDisplay('rank')}>
@@ -421,17 +380,6 @@ function Lab({
           <label className="small row" style={{ gap: 6 }}>
             <input type="checkbox" checked={peek} onChange={(event) => onPeek(event.target.checked)} /> Peek at the ten closest
           </label>
-          <button
-            type="button"
-            className="link-btn small"
-            onClick={() => {
-              onWeights(DEFAULT_WEIGHTS);
-              onEvents(DEFAULT_EVENT_WEIGHTS);
-              onHalfLife(DEFAULT_HALF_LIFE);
-            }}
-          >
-            Reset to the defaults
-          </button>
         </div>
       </div>
     </details>

@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { puzzleLabel, puzzleNumber } from '@/daily/day';
 import { LIVE_DAILY, type DailyGame } from '@/daily/types';
 import { getGame } from '@/games/registry';
+import { moneyShort } from '@/lib/format';
 import { AdminContext, api } from './api';
 import { Card } from './ui';
 
@@ -14,8 +15,8 @@ interface Cell {
 interface Row {
   day: string;
   /**
-   * Per game: today and the days after it, and a day filled in for a daily's
-   * archive after it was over (`late`) — never a day before the game's first.
+   * Per game: today and the days after it, and the days before for the
+   * one-player games (`PAST_EDITABLE`) — never a day before the game's first.
    */
   editable: Partial<Record<DailyGame, boolean>>;
   /** The dailies being served (`LIVE_DAILY`). */
@@ -38,8 +39,12 @@ interface Option {
    * different now, `past` once played, `rested` when over 90 days away (`SAME_REST`).
    */
   used?: { day: string; changed: boolean; past: boolean; rested?: boolean }[];
-  /** Why it cannot go on this day: one of its players is in another game then. */
+  /** Why it cannot go on this day: the player is another one-player game's answer then. */
   clash?: string;
+  /** A player's region, country and career earnings. */
+  player?: { region: string | null; country: string | null; earnings: number };
+  /** The days within 30 of this one the player is a one-player answer, nearest first. */
+  answered?: { day: string; game: string }[];
 }
 
 /** "Mon 5 Oct". */
@@ -54,8 +59,8 @@ const dayName = (day: string) =>
 /**
  * `/analytics/daily` — the daily puzzles, today and the coming days, per game:
  * move a puzzle to another day, pick one by hand, or draw a new one. Days
- * before today are what people played and cannot change — except the first
- * days of a daily that started in the past, filled in for its archive.
+ * before today are what people played and cannot change — except the
+ * one-player games', which stay open until the user says to lock them.
  */
 export function Daily() {
   const { onOut, tick } = useContext(AdminContext);
@@ -64,8 +69,6 @@ export function Daily() {
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  /** What a change did besides: another game's puzzle drawn again to keep players apart. */
-  const [note, setNote] = useState<string | null>(null);
   /** The day whose puzzle is being picked by hand. */
   const [choosing, setChoosing] = useState<string | null>(null);
 
@@ -81,9 +84,7 @@ export function Daily() {
 
   const post = async (path: string, body: object, touched: string[]) => {
     if (schedule && touched.some((day) => day < schedule.today)) {
-      const sure = window.confirm(
-        'That day is over. Only the archive has offered this puzzle, but someone may have played it there. Change it anyway?',
-      );
+      const sure = window.confirm('That day is over, and people may have played its puzzle. Change it anyway?');
       if (!sure) return;
     } else if (schedule && touched.includes(schedule.today)) {
       const sure = window.confirm('Today’s puzzle may already have been played. Change it anyway?');
@@ -91,14 +92,9 @@ export function Daily() {
     }
     setBusy(true);
     setMessage(null);
-    setNote(null);
-    const res = await api<{ error?: string; note?: string }>(`daily/${path}`, {
-      method: 'POST',
-      body: JSON.stringify({ game, ...body }),
-    });
+    const res = await api<{ error?: string }>(`daily/${path}`, { method: 'POST', body: JSON.stringify({ game, ...body }) });
     if (res.status === 401) return onOut();
     if (res.status >= 400) setMessage(res.body?.error ?? `That did not work (${res.status}).`);
-    else if (res.body?.note) setNote(res.body.note);
     setChoosing(null);
     await load();
     setBusy(false);
@@ -115,9 +111,9 @@ export function Daily() {
         <p className="small muted" style={{ margin: 0 }}>
           Today and the coming days, one game at a time. ↑ and ↓ swap a puzzle with the day before or after it;
           <strong> Choose</strong> picks one by hand; <strong>New</strong> draws another. Days before today were played
-          and stay as they were, except a daily’s first days, filled in for its archive. Nobody is in two games on one
-          day: a choice that would put a player in two is refused, unless the other one is Higher or Lower, whose pairs
-          are then drawn again.{schedule.today < schedule.start ? ` The first daily is ${dayName(schedule.start)}.` : ''}
+          and stay as they were, except in Fortnitedle, Career Path and Ready Up, whose earlier days can still change.
+          The three answers of one day are always three different players.
+          {schedule.today < schedule.start ? ` The first daily is ${dayName(schedule.start)}.` : ''}
         </p>
       </Card>
 
@@ -132,7 +128,6 @@ export function Daily() {
               setGame(id);
               setChoosing(null);
               setMessage(null);
-              setNote(null);
             }}
           >
             {getGame(id)?.icon} {getGame(id)?.title}
@@ -141,7 +136,6 @@ export function Daily() {
       </div>
 
       {message ? <p className="small" style={{ color: 'var(--danger)', margin: 0 }}>{message}</p> : null}
-      {note ? <p className="small muted" style={{ margin: 0 }}>{note}</p> : null}
 
       <div className="scroll-x">
         <table className="an-table">
@@ -165,7 +159,6 @@ export function Daily() {
                     <div className="tiny faint">
                       {number >= 1 ? puzzleLabel(number) : 'not started'}
                       {row.day === schedule.today ? ' · today' : ''}
-                      {open && row.day < schedule.today ? ' · archive' : ''}
                     </div>
                   </td>
                   <td style={{ width: '100%' }}>
@@ -214,7 +207,6 @@ export function Daily() {
                           <button
                             type="button"
                             className="icon-btn"
-                            title={game === 'higher-lower' ? 'Pick the category; its ten pairs are drawn' : undefined}
                             disabled={busy}
                             onClick={() => setChoosing(choosing === row.day ? null : row.day)}
                           >
@@ -247,9 +239,23 @@ export function Daily() {
   );
 }
 
+/** How the chooser orders players; boards and lists go fresh-first or by name. */
+type Sort = 'earnings' | 'earnings-asc' | 'name' | 'fresh';
+
+const SORTS: { id: Sort; label: string; players: boolean }[] = [
+  { id: 'earnings', label: 'Earnings, highest first', players: true },
+  { id: 'earnings-asc', label: 'Earnings, lowest first', players: true },
+  { id: 'fresh', label: 'Not used lately first', players: false },
+  { id: 'name', label: 'Name, A–Z', players: false },
+];
+
 /**
- * A search over everything a game's puzzle can be set to on `day`. Anything
- * that would put a player in two games that day is greyed out, with the reason.
+ * A search over everything a game's puzzle can be set to on `day`: by name,
+ * country or region, narrowed by region and band (or a board's group), and
+ * sorted by earnings, name or how recently it was used (the user, 22 Oct 2026:
+ * "improve category pick, so I can search for like region / sort by earnings").
+ * A player already another one-player game's answer that day is greyed out,
+ * with the reason.
  */
 function Chooser({
   game,
@@ -264,6 +270,10 @@ function Chooser({
 }) {
   const [options, setOptions] = useState<Option[] | null>(null);
   const [query, setQuery] = useState('');
+  const [region, setRegion] = useState('');
+  const [group, setGroup] = useState('');
+  const [hideRecent, setHideRecent] = useState(false);
+  const [limit, setLimit] = useState(60);
 
   useEffect(() => {
     let live = true;
@@ -273,16 +283,42 @@ function Chooser({
     };
   }, [game, day]);
 
+  const all = options ?? [];
+  const forPlayers = all.some((o) => o.player);
+  const [sort, setSort] = useState<Sort>(forPlayers ? 'earnings' : 'fresh');
+  useEffect(() => setSort(forPlayers ? 'earnings' : 'fresh'), [forPlayers]);
+  const regions = useMemo(() => [...new Set(all.flatMap((o) => o.player?.region ?? []))].sort(), [all]);
+  const groups = useMemo(() => [...new Set(all.flatMap((o) => o.group ?? []))], [all]);
+
+  /** Played with the same answers in the last 90 days: shown, so you can see when, but not choosable. */
+  const playedRecently = (o: Option) => (o.used ?? []).some((use) => use.past && !use.changed && !use.rested);
+  const blocked = (o: Option) => Boolean(o.clash) || playedRecently(o);
+
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const all = options ?? [];
-    const found = needle ? all.filter((o) => `${o.label} ${o.group ?? ''}`.toLowerCase().includes(needle)) : all;
-    // The fresh ones first: never used, then changed or rested since, then used as they are, then clashing.
+    const found = all.filter(
+      (o) =>
+        (!needle ||
+          [o.label, o.group, o.player?.country, o.player?.region].some((text) => text?.toLowerCase().includes(needle))) &&
+        (!region || o.player?.region === region) &&
+        (!group || o.group === group) &&
+        (!hideRecent || !(o.answered?.length || o.used?.length)),
+    );
+    // The fresh ones first: never used, then changed or rested since, then used as they are.
     const free = (use: NonNullable<Option['used']>[number]) => use.changed || use.rested;
-    const rank = (o: Option) =>
-      o.clash ? 4 : !o.used?.length ? 0 : o.used.some((use) => use.past && !free(use)) ? 3 : o.used.every(free) ? 1 : 2;
-    return [...found].sort((a, b) => rank(a) - rank(b)).slice(0, 60);
-  }, [options, query]);
+    const staleness = (o: Option) =>
+      o.player
+        ? o.answered?.length ? 1 : 0
+        : !o.used?.length ? 0 : o.used.some((use) => use.past && !free(use)) ? 3 : o.used.every(free) ? 1 : 2;
+    const order: Record<Sort, (a: Option, b: Option) => number> = {
+      earnings: (a, b) => (b.player?.earnings ?? 0) - (a.player?.earnings ?? 0),
+      'earnings-asc': (a, b) => (a.player?.earnings ?? 0) - (b.player?.earnings ?? 0),
+      name: (a, b) => a.label.localeCompare(b.label, 'en', { sensitivity: 'base' }),
+      fresh: (a, b) => staleness(a) - staleness(b),
+    };
+    // What cannot be picked always goes last.
+    return [...found].sort((a, b) => Number(blocked(a)) - Number(blocked(b)) || order[sort](a, b));
+  }, [all, query, region, group, hideRecent, sort]);
 
   return (
     <div className="stack-sm" style={{ marginTop: 8 }}>
@@ -291,34 +327,84 @@ function Chooser({
           className="input"
           autoFocus
           value={query}
-          placeholder={options ? `Search ${options.length} options…` : 'Loading…'}
-          onChange={(event) => setQuery(event.target.value)}
+          placeholder={options ? `Search ${options.length} by name${forPlayers ? ', country or region' : ' or group'}…` : 'Loading…'}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setLimit(60);
+          }}
         />
         <button type="button" className="icon-btn" onClick={onClose}>
           ✕
         </button>
       </div>
-      <div className="stack-sm" style={{ maxHeight: 260, overflowY: 'auto' }}>
-        {shown.map((option) => {
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        {forPlayers ? (
+          <select className="input an-select" value={region} onChange={(event) => setRegion(event.target.value)}>
+            <option value="">Every region</option>
+            {regions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        {groups.length > 1 ? (
+          <select className="input an-select" value={group} onChange={(event) => setGroup(event.target.value)}>
+            <option value="">{forPlayers ? 'Famous and regular' : 'Every group'}</option>
+            {groups.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <select className="input an-select" value={sort} onChange={(event) => setSort(event.target.value as Sort)}>
+          {SORTS.filter((option) => forPlayers || !option.players).map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <label className="tiny row" style={{ gap: 4 }}>
+          <input type="checkbox" checked={hideRecent} onChange={(event) => setHideRecent(event.target.checked)} />
+          Hide {forPlayers ? 'answers of the 30 days around' : 'ones already used'}
+        </label>
+        <span className="tiny faint">
+          {shown.length} of {all.length}
+        </span>
+      </div>
+      <div className="stack-sm" style={{ maxHeight: 320, overflowY: 'auto' }}>
+        {shown.slice(0, limit).map((option) => {
           const used = option.used ?? [];
-          // Played in the last 90 days with the same answers: shown, so you can see when, but not choosable.
-          const played = used.some((use) => use.past && !use.changed && !use.rested);
-          const blocked = played || Boolean(option.clash);
+          const played = playedRecently(option);
+          const off = blocked(option);
           const moves = used.filter((use) => !use.past && !use.changed);
           return (
             <button
               key={option.id}
               type="button"
               className="picker-option"
-              disabled={blocked}
-              style={blocked ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
-              title={
-                option.clash ?? (played ? 'Played in the last 90 days, and its answers have not changed since' : undefined)
-              }
+              disabled={off}
+              style={off ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+              title={option.clash ?? (played ? 'Played in the last 90 days, and its answers have not changed since' : undefined)}
               onClick={() => onPick(option.id)}
             >
               {option.label} {option.group ? <span className="faint">· {option.group}</span> : null}
+              {option.player ? (
+                <span className="tiny faint">
+                  {' '}
+                  · {[option.player.country, option.player.region].filter(Boolean).join(', ') || 'no country'} ·{' '}
+                  {moneyShort(option.player.earnings)}
+                </span>
+              ) : null}
               {option.clash ? <span className="tiny faint"> · {option.clash}</span> : null}
+              {!option.clash && option.answered?.length ? (
+                <span className="tiny" style={{ color: 'var(--warning)' }}>
+                  {' '}
+                  · answer {option.answered.slice(0, 2).map((use) => `${dayName(use.day)} (${use.game})`).join(', ')}
+                  {option.answered.length > 2 ? ` +${option.answered.length - 2}` : ''}
+                </span>
+              ) : null}
               {!option.clash && used.length ? (
                 <span className="tiny" style={{ color: played ? 'var(--text-faint)' : 'var(--warning)' }}>
                   {' '}
@@ -332,6 +418,11 @@ function Chooser({
             </button>
           );
         })}
+        {shown.length > limit ? (
+          <button type="button" className="btn" onClick={() => setLimit((n) => n + 60)}>
+            Show {Math.min(60, shown.length - limit)} more
+          </button>
+        ) : null}
       </div>
     </div>
   );
