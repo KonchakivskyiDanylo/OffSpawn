@@ -49,6 +49,8 @@ export interface GameState {
    * right after the 2024 Globals" is exactly that question.
    */
   steps: { clue: number; guess: RosterPlayer | null }[];
+  /** Clues whose teammates a hint has shown, in the order asked — see `TEAMMATE_HINTS`. */
+  hints: number[];
   status: 'playing' | 'won' | 'lost';
   /**
    * Ended by Give up rather than by running out. The steps used to tell the two
@@ -325,9 +327,55 @@ export function roundOf(secret: RosterPlayer, clues: readonly MajorResult[], mod
     earned: 1,
     guesses: [],
     steps: [],
+    hints: [],
     status: 'playing',
     gaveUp: false,
   };
+}
+
+/**
+ * Teammate hints a round gets: pick a team result already showing and see who
+ * the player finished it with (the user, 31 Oct 2026: "the player chooses hint
+ * and he can click on any tournament that he has already revealed and see who
+ * was the teammate… Maybe even more than 1, but implement it at least"). A
+ * hint costs nothing but itself; the count is the whole of the rule.
+ */
+export const TEAMMATE_HINTS = 1;
+
+/** Players on a team, by Liquipedia's format label. A solo result has no teammate to show. */
+const TEAM_SIZE: Record<string, number> = { Duo: 2, Trio: 3, Squad: 4 };
+
+/**
+ * Who the secret finished `result` with, or null when that cannot be said:
+ * a solo event, or a team the file cannot name in full — a partner with no
+ * Liquipedia page comes back missing, and two teams sharing a place come
+ * back as one too many.
+ */
+export function teammatesAt(result: MajorResult, secretId: string, field: Field): string[] | null {
+  const size = TEAM_SIZE[result.tournament.mode ?? ''];
+  if (!size) return null;
+  const others = [...field.finishers(result)].filter((id) => id !== secretId);
+  return others.length === size - 1 ? others : null;
+}
+
+export function hintsLeft(state: GameState): number {
+  return Math.max(0, TEAMMATE_HINTS - state.hints.length);
+}
+
+/** Whether a hint may show clue `index`'s teammates now: a team result already showing, not shown yet. */
+export function canHint(state: GameState, index: number, field: Field): boolean {
+  return (
+    state.status === 'playing' &&
+    hintsLeft(state) > 0 &&
+    index < state.revealed &&
+    !state.hints.includes(index) &&
+    teammatesAt(state.clues[index].result, state.secret.id, field) !== null
+  );
+}
+
+/** Spends a hint on clue `index`'s teammates; anything `canHint` refuses leaves the round as it was. */
+export function showTeammates(state: GameState, index: number, field: Field): GameState {
+  return canHint(state, index, field) ? { ...state, hints: [...state.hints, index] } : state;
 }
 
 /**
@@ -429,6 +477,7 @@ export function record(state: GameState): { outcome: Outcome; r: GamePayloads['c
         guess: step.guess ? ref(step.guess) : null,
         correct: step.guess?.id === state.secret.id,
       })),
+      hints: state.hints,
     },
   };
 }

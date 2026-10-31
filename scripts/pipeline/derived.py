@@ -1811,6 +1811,9 @@ def build(BASE):
             continue
         t = tour_of[events[0]]
         raw, named, placed = set(), set(), {}
+        # Which of `events` each player was in, for a field of several finals:
+        # Tenaball splits the 2026 Solo FNCS by region with it (31 Oct 2026).
+        final = {}
         for row in placements:
             if row.get('tournament') not in events or did_not_play(row):
                 continue
@@ -1825,6 +1828,7 @@ def build(BASE):
                 page = resolve(name)
                 if page:
                     named.add(page)
+                    final.setdefault(page, events.index(row['tournament']))
                     if rank is not None:
                         placed[page] = min(rank, placed.get(page, rank))
 
@@ -1857,11 +1861,14 @@ def build(BASE):
 
         pools.append({'id': pid, 'label': label, 'blurb': blurb,
                       'event': events[0], 'date': start,
-                      **({'events': events} if len(events) > 1 else {}),
+                      **({'events': events, 'finals': dict(sorted(final.items()))} if len(events) > 1 else {}),
                       'players': sorted(named),
                       'placements': dict(sorted(placed.items())),
                       'earningsBefore': {page: round(before[page]) for page in sorted(named)}})
         print(f'{label:<20} {len(raw):>3} entrants, {len(named):>3} playable, {len(placed):>3} placed')
+        if len(events) > 1:
+            per = Counter(final.values())
+            print('    by final:', {re.sub(r'^.*: (.+?) - Grand Finals$', r'\1', n): per[i] for i, n in enumerate(events)})
 
     payload = {'generated': TODAY, 'pools': pools}
     with open(OUT, 'w', encoding='utf-8') as fh:

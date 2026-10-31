@@ -107,7 +107,8 @@ export interface ClueRoundPayload {
 export interface GamePayloads {
   wordle: { secret: Ref; guesses: number };
   'guess-the-player': { secret: Ref; guesses: Ref[] };
-  'career-path': { secret: Ref; clues: Ref[]; steps: Step[] };
+  /** `hints`: the clues, by index, whose teammates a hint showed. Absent from rounds recorded before 31 Oct 2026. */
+  'career-path': { secret: Ref; clues: Ref[]; steps: Step[]; hints?: number[] };
   'who-are-ya': { secret: Ref; clues: Ref[]; steps: Step[] };
   tenaball: {
     board: Ref;

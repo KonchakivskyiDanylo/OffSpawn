@@ -13,6 +13,8 @@ interface ClueState {
   earned: number;
   guesses: RosterPlayer[];
   steps: { clue: number; guess: RosterPlayer | null }[];
+  /** Career Path's teammate hints; Who Are Ya has none. */
+  hints?: number[];
   status: 'playing' | 'won' | 'lost';
   gaveUp: boolean;
 }
@@ -23,6 +25,8 @@ export interface ClueSnapshot {
   earned: number;
   guesses: string[];
   steps: { clue: number; guess: string | null }[];
+  /** Absent from a day saved before Career Path had hints, and from Who Are Ya's. */
+  hints?: number[];
   status: ClueState['status'];
   gaveUp: boolean;
 }
@@ -33,6 +37,7 @@ export function snapClues(state: ClueState): ClueSnapshot {
     earned: state.earned,
     guesses: state.guesses.map((player) => player.id),
     steps: state.steps.map((step) => ({ clue: step.clue, guess: step.guess?.id ?? null })),
+    ...(state.hints ? { hints: state.hints } : {}),
     status: state.status,
     gaveUp: state.gaveUp,
   };
@@ -54,6 +59,7 @@ export function reviveClues<S extends ClueState>(fresh: S, saved: ClueSnapshot, 
     earned: saved.earned,
     guesses: guesses as RosterPlayer[],
     steps,
+    ...(fresh.hints && saved.hints ? { hints: saved.hints.filter((index) => index < fresh.clues.length) } : {}),
     status: saved.status,
     gaveUp: saved.gaveUp,
   };

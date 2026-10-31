@@ -24,13 +24,17 @@ import { moneyShort, ordinal, plural } from '@/lib/format';
 import { readLocal, writeLocal } from '@/lib/storage';
 import { getGame } from '@/games/registry';
 import {
+  canHint,
   cluesLeft,
   createGame,
   giveUp,
   guessesLeft,
+  hintsLeft,
   MIN_GUESSES,
   revealNext,
+  showTeammates,
   submitGuess,
+  teammatesAt,
   type GameState,
   type Mode,
   record as roundRecord,
@@ -82,6 +86,8 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
     result: clueResult,
   });
   const [practice, setPractice] = useState<GameState | null>(null);
+  /** Choosing which result's teammates the hint shows. */
+  const [picking, setPicking] = useState(false);
   const game = dailyOn ? daily.state : practice;
   const setGame = (next: GameState) => (dailyOn ? daily.setState(next) : setPractice(next));
 
@@ -128,6 +134,7 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
     }
     writeLocal(key, drawn.seen);
     setError(null);
+    setPicking(false);
     sendStart('career-path', false);
     setPractice(createGame(drawn.pick, majors.resultsFor(drawn.pick.id), mode, majors));
   }, [players, pools, event, choice, majors, mode, field]);
@@ -192,6 +199,16 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
   /** A career shorter than the guesses every round gets — see `MIN_GUESSES`. */
   const short = game.clues.length < MIN_GUESSES;
   const left = guessesLeft(game);
+  const hints = hintsLeft(game);
+  const hintable = visible.some((_clue, index) => canHint(game, index, majors));
+  const choosing = picking && !finished && hintable;
+  /** The names a hint showed on clue `index`; a partner off the roster by their page name. */
+  const teammatesOf = (index: number) =>
+    game.hints.includes(index)
+      ? (teammatesAt(game.clues[index].result, game.secret.id, majors) ?? [])
+          .map((id) => byId.get(id)?.name ?? id.replace(/_/g, ' '))
+          .join(' & ')
+      : undefined;
 
   return (
     <GameShell
@@ -238,8 +255,19 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
                   <ResultCard
                     number={index + 1}
                     result={clue.result}
-                    isNew={index === visible.length - 1 && !finished}
+                    isNew={index === visible.length - 1 && !finished && !choosing}
                     dim={finished && index >= game.earned}
+                    teammates={teammatesOf(index)}
+                    pick={
+                      !choosing
+                        ? undefined
+                        : canHint(game, index, majors)
+                          ? () => {
+                              setGame(showTeammates(game, index, majors));
+                              setPicking(false);
+                            }
+                          : null
+                    }
                   />
                 ) : (
                   <div className="board-card board-card--hidden">
@@ -271,6 +299,26 @@ function Game({ roster, majors, pools }: { roster: Roster; majors: Majors; pools
               You still get {MIN_GUESSES} guesses — the ones after the last clue reveal nothing new.
             </p>
           ) : null}
+          {/*
+            The teammate hint: pick a duo, trio or squad result already showing
+            and it names who the player finished it with. Solo results, and
+            teams the data cannot name in full, cannot be picked.
+          */}
+          {finished || hints === 0 ? null : choosing ? (
+            <div className="cp-hint">
+              <span className="small muted">Pick a highlighted result to see who they played it with.</span>
+              <button type="button" className="btn btn--ghost" onClick={() => setPicking(false)}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="cp-hint">
+              <button type="button" className="btn btn--ghost" onClick={() => setPicking(true)} disabled={!hintable}>
+                💡 Show a teammate ({hints} left)
+              </button>
+              {hintable ? null : <span className="tiny faint">Once a duo, trio or squad result is showing.</span>}
+            </div>
+          )}
         </section>
 
         {finished ? (
@@ -370,16 +418,25 @@ function ResultCard({
   result,
   isNew,
   dim,
+  teammates,
+  pick,
 }: {
   number: number;
   result: MajorResult;
   isNew?: boolean;
   /** A clue the round never needed, once it is over. */
   dim?: boolean;
+  /** Who a hint showed the player finished this with. */
+  teammates?: string;
+  /** While a hint is being placed: what picking this card does, or null when it cannot be picked. */
+  pick?: (() => void) | null;
 }) {
   const { tournament, placement } = result;
-  return (
-    <div className={`board-card${isNew ? ' board-card--new' : ''}${dim ? ' board-card--late' : ''}`}>
+  const className =
+    `board-card${isNew ? ' board-card--new' : ''}${dim ? ' board-card--late' : ''}` +
+    (pick ? ' board-card--pick' : pick === null ? ' board-card--nopick' : '');
+  const body = (
+    <>
       <span className="board-card__num">{number}</span>
       {isNew ? <span className="board-card__flag">new</span> : null}
       <span className={medalClass(placement)} aria-label={`Placed ${ordinal(placement)}`}>
@@ -391,6 +448,14 @@ function ResultCard({
         {tournament.year}
         {tournament.prizePool ? ` · ${moneyShort(tournament.prizePool)}` : ''}
       </span>
-    </div>
+      {teammates ? <span className="board-card__with">with {teammates}</span> : null}
+    </>
+  );
+  return pick ? (
+    <button type="button" className={className} onClick={pick} aria-label={`Show the teammates at ${tournament.shortName}`}>
+      {body}
+    </button>
+  ) : (
+    <div className={className}>{body}</div>
   );
 }

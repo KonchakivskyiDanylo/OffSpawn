@@ -4,6 +4,7 @@ import type { Pool, Pools } from '@/data/liquipedia/pools';
 import { Rankings, type Board } from "@/data/liquipedia/rankings";
 import { board, byValue, NEEDED, SLOTS, TIE_EARNINGS, TIE_GROUP_EARNINGS, tieText, type Ranked } from './board-builder';
 import type { Roster, RosterPlayer } from '@/data/liquipedia/roster';
+import { parseLobby } from '@/games/shared/lobbies';
 import { poolPlayers } from '@/games/shared/pool';
 import { money, ordinal, plural } from '@/lib/format';
 
@@ -45,6 +46,8 @@ export function poolBoards(
   players: RosterPlayer[],
   facts: Facts | null,
   orgs: Orgs | null,
+  /** False for a field that is one region's final, where "European players" is the whole board again. */
+  { regional = true }: { regional?: boolean } = {},
 ): Board[] {
   const out: Board[] = [];
   const add = (made: Board | null) => {
@@ -109,8 +112,8 @@ export function poolBoards(
     countries.set(p.countryName, entry);
   }
 
-  const regional = (region: string, who: string) =>
-    board(
+  const fromRegion = (region: string, who: string) =>
+    !regional ? null : board(
       `${prefix}:earnings:${region}`,
       group,
       `Top 10 ${who} by career earnings`,
@@ -175,7 +178,7 @@ export function poolBoards(
   );
 
   // 5 ---------------------------------------------------------------------------
-  add(regional('Europe', 'European players'));
+  add(fromRegion('Europe', 'European players'));
 
   // 6 ---------------------------------------------------------------------------
   add(
@@ -262,7 +265,7 @@ export function poolBoards(
   }
 
   // 10 --------------------------------------------------------------------------
-  add(regional('North America', 'North American players'));
+  add(fromRegion('North America', 'North American players'));
 
   // 11 is subscribers, which the export does not have.
 
@@ -537,14 +540,59 @@ export const FIELD_POOLS: readonly string[] = ['solos-2026'];
  * the all-time boards a title names its field — "Top 10 by career earnings"
  * alone is the all-time board's — which event mode, showing nothing else, never
  * needed.
+ *
+ * A field of several finals also gets each final's boards, under a heading of
+ * its own after the whole field's: "The 10 youngest — FNCS 2026 Solos Europe
+ * final" (the user, 31 Oct 2026: "region specific games like youngest eu
+ * players and world as well"). Every board a final can fill is offered, and
+ * one it cannot is dropped as usual — the NA West final has too few countries
+ * for a countries board. The whole field's boards of European and North
+ * American players are left out beside them: on the 29 Oct export the Europe
+ * final's earnings board had nine of their ten, and NA Central's nine of ten.
  */
 export function fieldBoards(pools: Pools | null, roster: Roster, facts: Facts | null, orgs: Orgs | null): Board[] {
   return FIELD_POOLS.flatMap((id) => {
     const pool = pools?.get(id);
     if (!pool) return [];
-    return poolBoards(pool, poolPlayers(roster, pools, id), facts, orgs).map((made) => ({
-      ...made,
-      title: `${made.title} — ${pool.label} field`,
-    }));
+    const players = poolPlayers(roster, pools, id);
+    const finals = finalFields(pool, players);
+    const named = (boards: Board[], label: string) => boards.map((made) => ({ ...made, title: `${made.title} — ${label}` }));
+    return [
+      ...named(poolBoards(pool, players, facts, orgs, { regional: finals.length === 0 }), `${pool.label} field`),
+      ...finals.flatMap((final) => named(poolBoards(final.pool, final.players, facts, orgs, { regional: false }), final.pool.label)),
+    ];
   });
+}
+
+/** The order a field's finals are listed in. */
+const FINAL_ORDER = ['Europe', 'NA Central', 'NA West', 'NA East', 'Brazil', 'Asia', 'Oceania', 'Middle East'];
+
+/**
+ * A field of several finals as one field per final — "FNCS 2026 Solos Europe
+ * final" and its 83 players — in `FINAL_ORDER`. None for a field of one event,
+ * or from a `pools.json` written before cell 5 said who was in which final.
+ */
+export function finalFields(pool: Pool, players: readonly RosterPlayer[]): { region: string; pool: Pool; players: RosterPlayer[] }[] {
+  const { events, finals } = pool;
+  if (!events || !finals) return [];
+  const rank = (region: string) => (FINAL_ORDER.includes(region) ? FINAL_ORDER.indexOf(region) : FINAL_ORDER.length);
+  return events
+    .map((event, index) => {
+      const region = parseLobby(event).variant ?? event;
+      const here = players.filter((player) => finals[player.id] === index);
+      return {
+        region,
+        pool: {
+          ...pool,
+          id: `${pool.id}:${region.toLowerCase().replace(/\s+/g, '-')}`,
+          label: `${pool.label} ${region} final`,
+          event,
+          events: undefined,
+          finals: undefined,
+          players: here.map((player) => player.id),
+        },
+        players: here,
+      };
+    })
+    .sort((a, b) => rank(a.region) - rank(b.region));
 }

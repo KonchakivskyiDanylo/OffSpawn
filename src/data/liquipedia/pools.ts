@@ -27,6 +27,10 @@ export interface Pool {
   blurb: string;
   /** The tournament the field was taken from. */
   event: string;
+  /** Every final, for a field of several — the 2026 Solo FNCS's seven regions. `event` is the first. */
+  events?: string[];
+  /** Which of `events` each player was in, by page name. Only with `events`. */
+  finals?: Record<string, number>;
   date: string;
   /** Page names, sorted. Entrants with no Liquipedia player page are absent. */
   players: string[];

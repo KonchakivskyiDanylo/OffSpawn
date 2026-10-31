@@ -54,7 +54,7 @@ import * as career from '@/games/career-path/engine';
 import * as whoAreYa from '@/games/who-are-ya/engine';
 import * as tenaball from '@/games/tenaball/engine';
 import { buildCriteria as buildListCriteria, buildPoolCriteria } from '@/games/list/criteria';
-import { FIELD_POOLS, poolBoards } from '@/games/tenaball/pool-boards';
+import { fieldBoards, FIELD_POOLS, finalFields, poolBoards } from '@/games/tenaball/pool-boards';
 import { derivedBoards } from '@/games/tenaball/derived-boards';
 import { globalsBoards, globalsEvents } from '@/games/tenaball/globals-boards';
 import { socialBoards } from '@/games/tenaball/social-boards';
@@ -625,6 +625,43 @@ if (majors) {
   if (full.clues.length === career.MAX_CLUES) {
     check(wrongs(full, career.MAX_CLUES - 1).status === 'playing', 'career-path: a ten-clue round ended early');
     check(wrongs(full, career.MAX_CLUES).status === 'lost', 'career-path: a ten-clue round outlived its clues');
+  }
+
+  // The teammate hint: offered on a team result showing, never on a solo one,
+  // once per round (`TEAMMATE_HINTS`), and it names a whole team — the right
+  // number of partners, the secret not among them.
+  {
+    const sizes: Record<string, number> = { Duo: 1, Trio: 2, Squad: 3 };
+    let named = 0;
+    let teamResults = 0;
+    for (const player of answerable) {
+      for (const result of majors.resultsFor(player.id)) {
+        const mates = career.teammatesAt(result, player.id, majors);
+        const size = sizes[result.tournament.mode ?? ''];
+        if (!size) {
+          check(mates === null, `career-path: a teammate hint on ${player.name}'s solo ${result.tournament.name}`);
+          continue;
+        }
+        teamResults++;
+        if (!mates) continue;
+        named++;
+        check(mates.length === size && !mates.includes(player.id), `career-path: ${player.name}'s teammates at ${result.tournament.name} read ${mates.join(', ')}`);
+      }
+    }
+    check(named >= teamResults * 0.8, `career-path: only ${named} of ${teamResults} team results can name the teammates`);
+    notes.push(`career-path: teammate hint names ${named} of ${teamResults} team results (${((100 * named) / teamResults).toFixed(1)}%)`);
+
+    const hand = career.createGame(secret, majors.resultsFor(secret.id), 'random', majors, 'hint')!;
+    const open = career.revealNext(career.revealNext(hand));
+    const at = open.clues.findIndex((_clue, i) => career.canHint(open, i, majors));
+    if (at >= 0) {
+      const hinted = career.showTeammates(open, at, majors);
+      check(hinted.hints.length === 1 && career.hintsLeft(hinted) === career.TEAMMATE_HINTS - 1, 'career-path: the hint was not spent');
+      check(career.showTeammates(hinted, at, majors) === hinted, 'career-path: one result hinted twice');
+      check(career.record(hinted).r.hints?.[0] === at, 'career-path: the hint is not recorded');
+    }
+    const hidden = hand.clues.findIndex((clue, i) => i >= hand.revealed && career.teammatesAt(clue.result, secret.id, majors));
+    if (hidden >= 0) check(!career.canHint(hand, hidden, majors), 'career-path: a hint on a result not showing yet');
   }
 
   // An event field reaches its short careers; the roster does not.
@@ -1249,6 +1286,17 @@ if (facts && orgs) {
     check(partners === 'Bylah, Cold, Pollo, Ritual', `criteria: Peterbot's FNCS partners read ${partners ?? 'nothing'}`);
     const anchors = all.filter((criterion) => criterion.kind === 'fncs-with');
     notes.push(`criteria: "won an FNCS with" anchors — ${anchors.map((c) => c.short.replace('Won FNCS with ', '')).join(', ')}`);
+
+    // "Won FNCS C2S4" (31 Oct 2026): a rule per round, named the way the scene
+    // says it, holding every region's winners — and a Globals is in none of them.
+    const rounds = all.filter((criterion) => criterion.kind === 'won-fncs-round');
+    check(rounds.length >= 25, `criteria: only ${rounds.length} "won an FNCS round" rules`);
+    check(new Set(rounds.map((c) => c.short)).size === rounds.length, 'criteria: two FNCS round rules share a name');
+    const c2s4 = rounds.find((criterion) => criterion.short === 'Won FNCS C2S4');
+    check(c2s4?.matches.length === 21, `criteria: "Won FNCS C2S4" has ${c2s4?.matches.length ?? 'no'} winners, not 7 regions' trios`);
+    check(rounds.some((c) => c.short === 'Won FNCS 2023 Major 1'), 'criteria: no "Won FNCS 2023 Major 1" rule');
+    if (cooper) check(rounds.every((c) => !c.test(cooper) || facts.of(cooper.id).fncsWinYears.length > 0), 'criteria: Cooper won an FNCS round for the Globals');
+    notes.push(`criteria: ${rounds.length} FNCS round rules — ${rounds.map((c) => c.short.replace('Won FNCS ', '')).join(', ')}`);
 
     const backToBack = all.find((criterion) => criterion.id === 'fncs-back-to-back');
     check(Boolean(backToBack), 'criteria: no back-to-back FNCS rule');
@@ -2732,6 +2780,26 @@ if (pools.pools.length > 0) {
     check(at.every((index, i) => i === 0 || index > at[i - 1]), `event ${pool.label}: field boards out of order`);
     check(at.length >= 10, `event ${pool.label}: only ${at.length} of the ${planned.length} planned boards built`);
     notes.push(`event ${pool.label}: ${boards.length} Tenaball boards, ${at.length} of ${planned.length} planned`);
+
+    // A field of several finals (31 Oct 2026): every player in one final, and
+    // each final's boards under a heading of their own after the whole field's.
+    const finals = finalFields(pool, field);
+    if (pool.events && pool.events.length > 1) {
+      check(finals.length === pool.events.length, `event ${pool.label}: ${finals.length} of ${pool.events.length} finals split out (no "finals" in pools.json?)`);
+      const split = finals.reduce((sum, final) => sum + final.players.length, 0);
+      check(split === field.length, `event ${pool.label}: ${split} of ${field.length} players placed in a final`);
+      check(finals.every((final) => !/^North America /.test(final.region)), `event ${pool.label}: a final reads ${finals.map((f) => f.region).join(', ')}`);
+    }
+    if (FIELD_POOLS.includes(pool.id) && finals.length > 0) {
+      const shown = fieldBoards(pools, roster, facts, orgs);
+      const groups = [...new Set(shown.map((b) => b.group))];
+      check(groups.length === finals.length + 1 && groups[0] === pool.label, `event ${pool.label}: field headings read ${groups.join(' | ')}`);
+      check(new Set(shown.map((b) => b.id)).size === shown.length, `event ${pool.label}: two field boards share an id`);
+      check(!shown.some((b) => /:earnings:(Europe|North America)$/.test(b.id)), `event ${pool.label}: the European and North American boards are still beside the finals'`);
+      const thin = finals.filter((final) => !shown.some((b) => b.group === final.pool.label && b.id.endsWith(':youngest')));
+      check(thin.length === 0, `event ${pool.label}: no youngest board for ${thin.map((f) => f.region).join(', ')}`);
+      notes.push(`event ${pool.label}: ${shown.length} field boards — ` + groups.map((g) => `${g.replace(`${pool.label} `, '')} ${shown.filter((b) => b.group === g).length}`).join(', '));
+    }
 
     // The results boards, once the event has been played: standings in place
     // order, every team slot closable by naming its players, and the two

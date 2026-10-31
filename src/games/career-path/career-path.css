@@ -81,3 +81,36 @@
   opacity: 0.55;
 }
 
+/*
+ * The teammate hint: its button under the board, and while it is being placed
+ * the results it can go on lit up and the rest faded back.
+ */
+.cp-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.board-card--pick {
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  cursor: pointer;
+  border-color: var(--warning);
+  box-shadow: 0 0 0 3px var(--warning-soft);
+}
+.board-card--pick:hover {
+  background: var(--surface-3);
+}
+.board-card--nopick {
+  opacity: 0.4;
+}
+
+.board-card__with {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--warning);
+  overflow-wrap: anywhere;
+}
+

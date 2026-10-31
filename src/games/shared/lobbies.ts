@@ -28,12 +28,15 @@ export interface Lobby {
   size: number;
 }
 
-const REGION = /^(Asia|Brazil|Europe|Middle East|North America East|North America West|North America|NA East|NA West|NA Central|Oceania)$/;
+const REGION =
+  /^(Asia|Brazil|Europe|Middle East|North America East|North America West|North America Central|North America|NA East|NA West|NA Central|Oceania)$/;
 
 /** The FNCS called the same places three ways; one spelling each. */
 const SAME_PLACE: Record<string, string> = {
   'North America East': 'NA East',
   'North America West': 'NA West',
+  // The 2026 Solo FNCS spelled it out, where the 2025–26 Majors had "NA Central".
+  'North America Central': 'NA Central',
 };
 
 export function parseLobby(raw: string): { round: string; variant: string | null } {
@@ -62,9 +65,27 @@ export function roundLabel(round: string): string {
   return label || round;
 }
 
-/** Every major with results on record, oldest first. */
+/**
+ * A round of the FNCS by the name the scene uses: "C2S4" and "Season X" for
+ * the seasons, which need no year; "2023 Major 1", "2021 Grand Royale" and
+ * "2026 Solos" for the rest, which do.
+ */
+export function roundName(eventName: string, year: number): string {
+  const label = roundLabel(parseLobby(eventName).round).replace(/ BR$/, '');
+  return /^(C\d+S\d+|Season )/.test(label) ? label : `${year} ${label}`;
+}
+
+/**
+ * Every major with its results in, oldest first.
+ *
+ * A final with no winner on record is left out: Liquipedia fills a leaderboard
+ * over the days after the event, and a pull in between catches it half done —
+ * the 29 Oct 2026 pull had FNCS 2026 Solos NA West with only its 94th–96th,
+ * which dealt as a one-clue round.
+ */
 export function lobbiesOf(majors: Majors): Lobby[] {
   return majors.tournaments
+    .filter((tournament) => majors.fieldOf(tournament.name)[0]?.placement === 1)
     .map((tournament: MajorTournament): Lobby => {
       const { round, variant } = parseLobby(tournament.name);
       const field = majors.fieldOf(tournament.name);
@@ -77,10 +98,9 @@ export function lobbiesOf(majors: Majors): Lobby[] {
         variant,
         mode: tournament.mode,
         prizePool: tournament.prizePool,
-        size: field.length ? field[field.length - 1].placement : 0,
+        size: field[field.length - 1].placement,
       };
     })
-    .filter((lobby) => lobby.size > 0)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.name < b.name ? -1 : 1));
 }
 

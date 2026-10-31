@@ -191,6 +191,7 @@ export const GAMES: GameMeta[] = [
       'Majors only: Epic’s grand finals since the 2019 World Cup — regional FNCS finals, the Globals, the World Cup.',
       'Each clue is a tournament and the player’s finish.',
       'Only players with five or more majors can be the answer.',
+      'One teammate hint a round: pick a duo, trio or squad result already showing to see who the player finished it with.',
       'When the round ends, the clues you did not need are shown, dimmed.',
     ],
     sections: [
@@ -479,6 +480,7 @@ export const GAMES: GameMeta[] = [
         items: [
           'Won EU FNCS, Won FNCS in 2023, Won a Duo FNCS — regional finals; a Globals is not an FNCS win.',
           'Won FNCS with Peterbot — was on one of their winning teams.',
+          'Won FNCS C2S4, Won FNCS 2023 Major 1 — won that round’s final in any region.',
           'FNCS winner before 16 — age on the day of the final.',
           'Won FNCS back to back — two rounds of finals in a row, any region.',
           'Won majors back to back — two majors in a row, the Globals and LANs included: losing the Globals between two FNCS wins ends it.',

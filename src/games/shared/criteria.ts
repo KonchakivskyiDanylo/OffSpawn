@@ -2,6 +2,7 @@ import type { Facts } from '@/data/liquipedia/facts';
 import type { Orgs } from '@/data/liquipedia/orgs';
 import type { RosterPlayer } from '@/data/liquipedia/roster';
 import { countShort, PLATFORM_META, type Socials } from '@/data/socials';
+import { roundName } from '@/games/shared/lobbies';
 import { moneyShort } from '@/lib/format';
 import { namedPlayer, namesakesOf } from '@/lib/text';
 
@@ -38,6 +39,8 @@ export type CriterionKind =
   | 'lan-podium'
   | 'won-fncs-region'
   | 'won-fncs-year'
+  // Added for Box Fight on 31 Oct 2026; Connections' and Griefer's whitelists leave it out.
+  | 'won-fncs-round'
   | 'played-event'
   | 'age'
   // Added for Box Fight on 14 Oct 2026; Connections' and Griefer's whitelists leave them out.
@@ -333,6 +336,27 @@ export function buildCriteria(
       `won a regional FNCS final in ${year}`,
       `Won FNCS in ${year}`,
       (p) => facts.of(p.id).fncsWinYears.includes(year),
+    );
+  }
+
+  /*
+   * "Won FNCS C2S4": a regional final of that round won, in any region (the
+   * user, 31 Oct 2026: "if there are a lot of regions, then there are a lot of
+   * players"). Six or seven finals a round, so a trios season has twenty-one
+   * winners. The Summit and the 2022 Invitational are LANs, not a region's
+   * final, and are left out as everywhere an FNCS title is counted.
+   */
+  for (const round of facts.fncsRounds) {
+    const finals = round.filter((event) => !event.lan);
+    if (finals.length === 0) continue;
+    const winners = new Set(finals.flatMap((event) => [...facts.wonAt(event.index)]));
+    const name = roundName(finals[0].name, finals[0].year);
+    add(
+      `won-fncs-round:${name}`,
+      'won-fncs-round',
+      `won a regional final of FNCS ${name}`,
+      `Won FNCS ${name}`,
+      (p) => winners.has(p.id),
     );
   }
 
