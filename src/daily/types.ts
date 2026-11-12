@@ -46,7 +46,8 @@ export type DailyGame = (typeof DAILY_GAMES)[number];
  * In the order a day is made. The three secret players are three different
  * people (`DailyContext.taken`); the other games' players do not count.
  */
-export const LIVE_DAILY: readonly DailyGame[] = ['tenaball', 'wordle', 'career-path', 'who-are-ya', 'contextinho'];
+// export const LIVE_DAILY: readonly DailyGame[] = ['tenaball', 'wordle', 'career-path', 'who-are-ya', 'contextinho'];
+export const LIVE_DAILY: readonly DailyGame[] = ['tenaball', 'wordle', 'career-path', 'who-are-ya'];
 
 export const isLiveDaily = (game: string): game is DailyGame => (LIVE_DAILY as readonly string[]).includes(game);
 
