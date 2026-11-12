@@ -47,7 +47,7 @@ export type DailyGame = (typeof DAILY_GAMES)[number];
  * people (`DailyContext.taken`); the other games' players do not count.
  */
 // export const LIVE_DAILY: readonly DailyGame[] = ['tenaball', 'wordle', 'career-path', 'who-are-ya', 'contextinho'];
-export const LIVE_DAILY: readonly DailyGame[] = ['tenaball', 'wordle', 'career-path', 'who-are-ya'];
+export const LIVE_DAILY: readonly DailyGame[] = [];
 
 export const isLiveDaily = (game: string): game is DailyGame => (LIVE_DAILY as readonly string[]).includes(game);
 
