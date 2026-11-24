@@ -88,7 +88,7 @@ import * as dailyProgress from '@/daily/progress';
 import { clueGrid, clueResult, snapClues } from '@/daily/clue-round';
 import { knownPlayers } from '@/daily/fame';
 import { freezeDay, generateDaily, missingFrom, playersIn } from '@/daily/generate';
-import { DAILY_FROM, DAILY_GAMES, gamesOn, puzzleId, type DailySet } from '@/daily/types';
+import { DAILY_FROM, DAILY_GAMES, gamesOn, isDailyOn, LIVE_DAILY, puzzleId, type DailySet } from '@/daily/types';
 import * as hlDaily from '@/games/higher-lower/daily';
 import * as cxDaily from '@/games/contextinho/daily';
 import { SECRET_GAMES } from '@/daily/generate';
@@ -3059,12 +3059,22 @@ if (socials.platforms.length > 0) {
       daily.puzzleDay(3, 'higher-lower') === daily.addDays(DAILY_FROM['higher-lower'], 2),
     'daily: a game does not number its puzzles from its own first day',
   );
-  check(
-    gamesOn(daily.addDays(DAILY_FROM.wordle, -1)).every((game) => DAILY_FROM[game] < DAILY_FROM.wordle) &&
-      gamesOn(DAILY_FROM.wordle).includes('wordle') &&
-      !gamesOn(DAILY_FROM.wordle).includes('tic-tac-toe'),
-    'daily: a day has a puzzle for a game that had not started, or for Box Fight',
-  );
+  if (LIVE_DAILY.length > 0) {
+    check(
+      gamesOn(daily.addDays(DAILY_FROM.wordle, -1)).every((game) => DAILY_FROM[game] < DAILY_FROM.wordle) &&
+        gamesOn(DAILY_FROM.wordle).includes('wordle') &&
+        !gamesOn(DAILY_FROM.wordle).includes('tic-tac-toe'),
+      'daily: a day has a puzzle for a game that had not started, or for Box Fight',
+    );
+  } else {
+    // Dailies switched off (12 Nov 2026): no day serves a puzzle and every game plays
+    // unlimited. The machinery below is still built and checked, through DAILY_GAMES.
+    const someday = daily.addDays(daily.DAILY_START, 400);
+    check(
+      gamesOn(someday).length === 0 && DAILY_GAMES.every((game) => !isDailyOn(game, someday)),
+      'daily: dailies are off, but a day still serves a puzzle',
+    );
+  }
 
   // Streaks count days played in a row, up to today or, before today's is played, yesterday.
   const days = ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-05'];

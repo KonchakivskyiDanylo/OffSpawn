@@ -202,7 +202,7 @@ export function termsIn(text: string, id = ''): TermId[] {
   const field = id.startsWith('pool:');
   // The average-finish boards: their region is the final's, and their duos
   // are teams ranked together rather than a count of tournaments shared.
-  const averages = /^(season|fncs-avg|fncs-every):/.test(id);
+  const averages = /^(season|fncs-avg|fncs-every|solo-fncs|solo-fncs-money|solo-fncs-both):/.test(id);
   // Div Cups and Evaluations: their own term says what their regions are.
   const weekly = /^(divcup|fpe)/.test(id);
   const region = /\bby region\b|Europe|North America|South America|Brazil|\bAsia\b|Oceania|Middle East|\bNA (East|West|Central)\b/i;

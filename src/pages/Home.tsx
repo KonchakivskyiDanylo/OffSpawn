@@ -51,20 +51,23 @@ export function Home() {
   usePageMeta(HOME_META);
   useOpen('home');
   const today = useToday();
-  const [daily] = usePlayMode();
-  usePrefetch(today, daily);
-  const countdown = useCountdown();
+  const [siteDaily] = usePlayMode();
   // A game before its first daily is under Unlimited until that day.
   const isDaily = (game: GameMeta) => isDailyOn(game.id, today);
   const dailies = VISIBLE_GAMES.filter(isDaily);
   const endless = VISIBLE_GAMES.filter((game) => !isDaily(game));
+  // No daily served today (`LIVE_DAILY` empty since 12 Nov 2026): the plain grid,
+  // not an empty "Today's puzzles" strip that reads "All done for today".
+  const daily = siteDaily && dailies.length > 0;
+  usePrefetch(today, daily);
+  const countdown = useCountdown();
 
   // Read through the shared store, so finishing a puzzle in another tab ticks it here too.
   const all = useDailyLogs();
   const logs = dailies.map((game) => [game, all[game.id as DailyGame]] as const);
   const doneToday = logs.filter(([, log]) => log[today]).length;
 
-  // Before the dailies start (or on a dev server in practice): every game, as the site always was.
+  // Before the dailies start, with none served, or on a dev server in practice: every game, as the site always was.
   if (!daily) {
     return (
       <div className="page stack-lg">

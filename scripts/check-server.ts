@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { RECORD_VERSION, type RoundRecord } from '@/analytics/types';
 import { dayKey } from '@/daily/day';
-import type { DailySet } from '@/daily/types';
+import { gamesOn, LIVE_DAILY, type DailySet } from '@/daily/types';
 
 const problems: string[] = [];
 const check = (ok: boolean, message: string) => {
@@ -109,7 +109,12 @@ try {
   const first = await request(`/api/daily/${today}`);
   const set = first.body as DailySet;
   check(first.status === 200 && set?.day === today && typeof set.puzzles === 'object', `the daily puzzles did not come (${first.status})`);
-  check(Object.keys(set?.puzzles ?? {}).length > 0, 'the daily set has no puzzles in it');
+  // With the dailies switched off (`LIVE_DAILY` empty since 12 Nov 2026) a day is still answered, empty.
+  const served = Object.keys(set?.puzzles ?? {}).length;
+  check(
+    gamesOn(today).length > 0 ? served > 0 : served === 0,
+    gamesOn(today).length > 0 ? 'the daily set has no puzzles in it' : `dailies are off, but the daily set has ${served} puzzles in it`,
+  );
   const again = await request(`/api/daily/${today}`);
   check(JSON.stringify(again.body) === JSON.stringify(set), 'asking for the same day twice gave two different sets');
   check((await request('/api/daily/2026-02-30')).status === 400, 'a day that does not exist was answered');
@@ -220,7 +225,15 @@ try {
     rows: { day: string; editable: Record<string, boolean>; puzzles: Record<string, { label: string }> }[];
   };
   const editable = plan?.rows?.filter((row) => row.editable.tenaball) ?? [];
-  check(editable.length === 7, `the schedule has ${editable.length} days ahead, expected 7`);
+  if (LIVE_DAILY.length === 0) {
+    // Dailies off: the editor still answers, with no game on any day.
+    check(
+      (plan?.rows?.length ?? 0) > 0 && plan.rows.every((row) => Object.keys(row.puzzles).length === 0 && Object.keys(row.editable).length === 0),
+      'dailies are off, but the schedule editor still lists a game',
+    );
+  } else {
+    check(editable.length === 7, `the schedule has ${editable.length} days ahead, expected 7`);
+  }
   if (editable.length >= 2) {
     const [a, b] = editable;
     const swap = await post('/api/admin/daily/swap', { game: 'tenaball', a: a.day, b: b.day }, cookie);

@@ -54,8 +54,9 @@ export function fncsRegion(event: { region?: string | null; name: string }): str
   const region = event.region ?? null;
   if (region === 'South America') return 'Brazil';
   if (region !== 'North America') return region;
-  if (/NA East|North America East/.test(event.name)) return 'NA East';
-  if (/NA West|North America West/.test(event.name)) return 'NA West';
+  // The 2026 Reload FNCS shortened them: "FNCS 2026 Reload: NAW".
+  if (/NA East|North America East|\bNAE\b/.test(event.name)) return 'NA East';
+  if (/NA West|North America West|\bNAW\b/.test(event.name)) return 'NA West';
   return 'NA Central';
 }
 

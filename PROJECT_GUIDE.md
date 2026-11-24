@@ -4,7 +4,7 @@ As of 26 September 2026: every game and how it chooses its players, the data, th
 
 ## What OffSpawn is
 
-OffSpawn is nineteen browser puzzle games about competitive Fortnite players, seven of them on the live site. They are built on a Liquipedia export of 5,678 players, 14,645 tournaments and 442,736 placements.
+OffSpawn is nineteen browser puzzle games about competitive Fortnite players, all of them on the live site and all unlimited since 24 Nov 2026. They are built on a Liquipedia export of 5,678 players, 14,645 tournaments and 442,736 placements.
 
 The site is React, Vite and TypeScript. Every game splits in two: a pure `engine.ts` with the rules and no React, and a component that draws it. That split is what lets a script play every game to the end in Node.
 
@@ -30,7 +30,7 @@ The site is React, Vite and TypeScript. Every game splits in two: a pure `engine
 | Transfer Window | Name the player from the organisations they have played for | `transfer-window` |
 | Which Lobby? | Name the tournament from its leaderboard, revealed from the bottom up | `which-lobby` |
 
-**Hidden for now: Guess the Player, Connections and Griefer (26 Sep 2026), Pyramid and Bingo (new, 30 Sep 2026), the seven October games but Contextinho (new, 2 Oct 2026 — see their section; Contextinho public since 22 Oct), and List (4 Oct 2026: too close to Tenite, back in about a month).** A `hidden` flag in the registry takes a game off the home page and the side nav, and the live site sends its address home. A dev server still opens it by URL, and `check:games` still plays it. Guess the Player needs more than it has. Of the three rule-grid games only one is kept, Tic Tac Toe: every board builds at every level and none repeats over 200 deals. Its Easy level is the thin one, with 30 distinct rules, and "won the EU FNCS" and "$1M+ earner" each sit on 41% of Easy boards. Delete the flag to bring a game back.
+**Every game is open since 24 Nov 2026** (the user: "stop dailies and do all of the games, open all of them as they are right now and do them unlimited on the website"). Until then these were hidden: Guess the Player, Connections and Griefer (26 Sep 2026), Pyramid and Bingo (new, 30 Sep 2026), the seven October games but Contextinho (new, 2 Oct 2026 — see their section; Contextinho public since 22 Oct), and List (4 Oct 2026: too close to Tenite). The reasons below still hold for them; they went up as they were. A `hidden` flag in the registry takes a game off the home page and the side nav, and the live site sends its address home. A dev server still opens it by URL, and `check:games` still plays it. Guess the Player needs more than it has. Of the three rule-grid games only one is kept, Tic Tac Toe: every board builds at every level and none repeats over 200 deals. Its Easy level is the thin one, with 30 distinct rules, and "won the EU FNCS" and "$1M+ earner" each sit on 41% of Easy boards. Delete the flag to bring a game back.
 
 Six folders keep old names: Fortnitedle lives in `wordle`, Griefer in `impostor`, Tenite in `tenaball` (Tenaball until 13 Oct 2026, the user: "it's a football name"), and since 14 Oct 2026 Ready Up in `who-are-ya` (Who Are Ya?; the user: "rename it to ready up", not Duo Finder, "because there are trio, squad tournaments as well"), Box Fight in `tic-tac-toe` (Tic Tac Toe) and Squads in `connections` (Connections). The rest of this guide still says Who Are Ya, Tic Tac Toe and Connections in places; they are the same games. The ids stay unchanged because best scores, daily progress and the daily schedule are stored under them. The old address, which is the id, is a 301 to the new one (`src/games/moved.ts`, read by the server; the app does the same on a dev server), so `/game/tenaball` in shared results still lands on Tenite.
 
@@ -39,7 +39,7 @@ How it runs:
 - **Locally:** `npm run dev:all` starts the site on port 5173 and the API on port 3000. The analytics page opens without a password, and rounds you play are recorded to `server/.data` on your machine.
 - **In production:** Heroku, live since the end of September 2026. `npm start` serves the built site and the API from one Node process, stores records in Postgres, and puts `/analytics` behind `ADMIN_PASSWORD`.
 - **No accounts yet.** Best scores, daily progress and streaks live in each browser's local storage.
-- **Daily puzzles on the live site** for Tenite since 5 Oct, and since 22 Oct 2026 for Fortnitedle, Career Path and Ready Up too, from Monday 19 Oct, their first days filled in for the archive. Contextinho is public since 22 Oct and a daily from 26 Oct, unlimited until then. Higher or Lower and Box Fight play unlimited (Higher or Lower has a daily built, not served yet). See "Daily puzzles" below.
+- **No daily puzzles since 12 Nov 2026**: `LIVE_DAILY` is empty, so every game plays unlimited with its setup screens and the home page is one grid of all nineteen. Before that, Tenite was a daily from 5 Oct, Fortnitedle, Career Path and Ready Up from 19 Oct and Contextinho from 26 Oct. The daily code and its checks are kept; see "Daily puzzles" below to turn them back on.
 
 ## The data
 
@@ -342,7 +342,7 @@ You get one top-10 board and ten empty slots, and name the ten. A correct answer
 | Countries | 20 | country names |
 | Paydays | 20 | the tournament where the money was won |
 | Organisations | 11 | organisation names |
-| 2019–2026 season | 190 | top 10 by average finish, at the year's majors and at its FNCS finals alone: the world and each FNCS region, and duos or trios from 2022 |
+| 2019–2026 season | 190 | top 10 by average finish, at the year's majors and at its FNCS finals alone: the world and each FNCS region, and duos or trios from 2022. Since 24 Nov 2026 also the two 2026 Solo FNCS together, average finish and prize money (8 boards today; see "Season boards") |
 | FNCS all time | 9 | top 10 by average finish across every FNCS round since 2019: the world and each FNCS region |
 | Div Cups | 285 | finals reached, wins and earnings (all time, by chapter, by year), and average finish for players and for duos or trios (by chapter, year and season): the world and each of the seven regions |
 | Performance Evaluations | 41 | sessions played and earnings (all time and by year, earnings by format too): the world, Europe and NA Central |
@@ -405,6 +405,12 @@ A round is every region's final in one week (the waves), and a player has one fi
 A missed event counts as twice a full lobby's last place: 100th in duos, 66th in trios, 200th in solos, 50th in squads. Being there with no finish recorded (a DQ, or out of the Summit before its last stage) counts as a miss. Level averages go to the better best finish, then the bigger career earner, a team's combined.
 
 **A year with a round in another format gets its player boards twice** (22 Oct 2026, the user: "let's have 2 without solos and with"). 2026's FNCS Majors are duos and its Solo FNCS (26–27 Oct) is solos, so once the Solos have results, each 2026 season and FNCS-average player board — the world and each region — comes as "… without the Solo FNCS" on its old id, the round left out so a player who never tried for it is not counted as missing it, and "… with the Solo FNCS" on `season:2026:with-solos:…` and `fncs-avg:2026:with-solos:…`, a missed Solos final at 200th. vic0 stays on 5.6 for Europe without it. The duo boards never had it. Until the results are in there is one board, as before, with no suffix. The two are one family for the daily (`familyOf`), so they are never days apart. The all-time FNCS averages count the Solos like every solo round before it. Tested on faked results: 16 boards more, nothing before 2026 moved. A board with a player the roster cannot name in its top eleven is not built (2025's Middle East trios).
+
+**The Reload FNCS** (21–22 Nov 2026), 2026's second Solo FNCS, is solos in lobbies of 40, so a missed one counts as **80th**, not 200th (the user, 24 Nov 2026: "200 for br and 80 for reload"). It is its own format for the miss and the tie rule (`MISSED['Reload']`, `round_format`) and a solo round for everything else (`FAMILY`), so the 2026 boards still split "with" and "without the Solo FNCS" on their old ids, the Solos BR and the Reload together. Its finals spell the regions short — "FNCS 2026 Reload: NAW", NAC, EU — which the pipeline (`fncs_server`, the paydays' `_REGION_TAIL`) and the browser (`parseLobby`, `fncsRegion`) read as NA West, NA Central and Europe; NA West's Reload had been filed under NA Central.
+
+**Results still coming in** (24 Nov 2026). Liquipedia lists a final's places before it names who took them: the Reload's Brazil final had its 40 places and no names, NA West only its 21st to 40th. A final with a place nobody is named on is pending (`ROUND_PENDING`, printed by the build). That region's boards and lists leave the round out, and the world's leave it out entirely, rather than count the players not yet named as having missed it. The build prints which ones; they come back by themselves once Liquipedia fills them in. Nothing before the Reload is pending. Before this, the Reload sat on the world's 2026 and all-time boards with everyone else at 200th, which put its finalists at the top (Hellonsteam 3rd all time).
+
+**The 2026 Solo FNCS together** (the user, 24 Nov 2026: "top 10 best players combined in this fncs (global and region)"). For a year of team Majors with two or more Solo FNCS, two more boards per region and the world, in the year's season group: "Top 10 by average finish across both 2026 Solo FNCS" (`solo-fncs:2026:…`), BR and Reload only, a missed one at 200th and 80th, level ones to the better best finish then career earnings; and "Top 10 earners across both 2026 Solo FNCS" (`solo-fncs-money:2026:…`), the prize money from both added up, level sums to that average. A region's boards wait for both its finals to be named, the world's for every region. Today: the average for Europe (Demus 4.0: 5th and 3rd), NA Central (Pollo 3.0), Asia and the Middle East; the money for Europe, NA Central, the Middle East and Oceania. Asia's money and Oceania's average have a top-11 finisher with no Liquipedia page. The world boards, Brazil and NA West come with the names.
 
 ### Div Cups and Performance Evaluations
 
@@ -474,6 +480,7 @@ You get one list and 90 seconds to name as many of it as you can. Every correct 
 | Div Cups | 94 | winners by region, and duo and trio winners by region; 40+ and 50+ finals, 20+ and 30+ in one region; 5+ and 8+ wins; played every week of a season, by region |
 | Performance Evaluations | 6 | 40+ and 60+ sessions, by region too |
 | The 2026 season | 1 | played all five big events (the top 10s are Tenite boards) |
+| Both 2026 Solo FNCS | 5 | made both the Solos BR and the Reload final — Europe 20, NA Central 28, Asia 21, Middle East 20, Oceania 21 (24 Nov 2026, the user: "every player to qualify both solos (every region and world)"). Split by region like the year lists (`solo-fncs-both` in `derived.py`). The world list, Brazil and NA West wait for Liquipedia to name the Reload's Brazil and NA West finishers (see "Season boards"), and come by themselves on the next data update |
 | Titles and fields | 2 | LAN winners; qualified for a field |
 
 Lists answered with countries or organisations search every name, not just the answers.
@@ -946,6 +953,8 @@ It plays every game with a perfect player, generating the random games many time
 A generated data file that is missing makes its games report SKIPPED and the suite still passes, so a fresh clone is testable before the notebook runs.
 
 ## Daily puzzles
+
+**Switched off since 12 Nov 2026** (`LIVE_DAILY = []` in `src/daily/types.ts`; the user, 24 Nov: "I don't feel like playing this right now and promoting"). No day gets a puzzle, every game page plays unlimited with no chip and no 📅 Earlier, an old `?puzzle=N` link opens the game unlimited, and the home page shows the plain grid instead of an empty "Today's puzzles" strip (`Home.tsx` falls back when no game is a daily that day). Browsers keep their logs of past dailies (nothing was deleted), though every streak has lapsed. `check:games` and `check:server` test the daily machinery either way and assert that nothing is served while the list is empty. To bring them back, put the games back in `LIVE_DAILY` (the old list is in the comment above it): their puzzle numbers and archives carry on from their `DAILY_FROM`, and the server fills in the skipped days on start. Everything below describes the dailies as they ran.
 
 From **5 October 2026** (`DAILY_START`) the live site is **daily puzzles only** — before that day it plays as it always did, with a line on the home page saying when the dailies start, and it switches by itself at midnight in Berlin: one puzzle per game per day, the same for everyone. The setup screens — the pool picker, levels, modes, the board and list pickers — are still there on a dev server, behind a **🛠 Practice** button in each game's toolbar (`usePlayMode` in `src/daily/useDailyRound.ts`).
 

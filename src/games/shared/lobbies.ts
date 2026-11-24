@@ -29,14 +29,19 @@ export interface Lobby {
 }
 
 const REGION =
-  /^(Asia|Brazil|Europe|Middle East|North America East|North America West|North America Central|North America|NA East|NA West|NA Central|Oceania)$/;
+  /^(Asia|Brazil|Europe|EU|Middle East|North America East|North America West|North America Central|North America|NA East|NA West|NA Central|NAE|NAW|NAC|Oceania)$/;
 
-/** The FNCS called the same places three ways; one spelling each. */
+/** The FNCS called the same places four ways; one spelling each. */
 const SAME_PLACE: Record<string, string> = {
   'North America East': 'NA East',
   'North America West': 'NA West',
   // The 2026 Solo FNCS spelled it out, where the 2025–26 Majors had "NA Central".
   'North America Central': 'NA Central',
+  // And the 2026 Reload FNCS shortened them: "FNCS 2026 Reload: NAW - Grand Finals".
+  NAE: 'NA East',
+  NAW: 'NA West',
+  NAC: 'NA Central',
+  EU: 'Europe',
 };
 
 export function parseLobby(raw: string): { round: string; variant: string | null } {

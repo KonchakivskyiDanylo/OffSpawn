@@ -386,8 +386,6 @@ export const GAMES: GameMeta[] = [
       'earnings',
       'teammates',
     ],
-    // Hidden 4 Oct 2026: too close to Tenaball for now, back in about a month.
-    hidden: true,
     Component: lazy(() => import('./list/ListGame')),
   },
   {
@@ -427,9 +425,6 @@ export const GAMES: GameMeta[] = [
       POOL_SECTION,
     ],
     terms: ['org', 'fncs-title', 'lan', 'global', 'earnings', 'nationality', 'region'],
-    // Hidden 26 Sep 2026: one of Griefer, Connections and Tic Tac Toe for now, and
-    // Tic Tac Toe is the one kept. Its griefers are near misses since 3 Oct 2026.
-    hidden: true,
     Component: lazy(() => import('./impostor/ImpostorGame')),
   },
   {
@@ -512,8 +507,6 @@ export const GAMES: GameMeta[] = [
     ],
     sections: [POOL_SECTION],
     terms: ['nationality', 'region', 'org', 'fncs-title', 'lan', 'major', 'earnings'],
-    // Hidden 26 Sep 2026 in favour of Tic Tac Toe; thin pools cannot build a board.
-    hidden: true,
     Component: lazy(() => import('./connections/ConnectionsGame')),
   },
   {
@@ -547,8 +540,6 @@ export const GAMES: GameMeta[] = [
       POOL_SECTION,
     ],
     terms: ['region', 'nationality', 'age', 'earnings', 'fncs-title', 'fncs-final', 'teammates'],
-    // Hidden 26 Sep 2026: needs more than the columns it has before it is hosted.
-    hidden: true,
     Component: lazy(() => import('./guess-the-player/GuessThePlayerGame')),
   },
   {
@@ -578,8 +569,6 @@ export const GAMES: GameMeta[] = [
       },
     ],
     terms: ['fncs-final', 'fncs-title', 'earnings', 'age'],
-    // New 30 Sep 2026, not hosted yet.
-    hidden: true,
     Component: lazy(() => import('./pyramid/PyramidGame')),
   },
   {
@@ -617,13 +606,11 @@ export const GAMES: GameMeta[] = [
       },
     ],
     terms: ['nationality', 'region', 'org', 'fncs-title', 'fncs-final', 'major', 'lan', 'global', 'earnings', 'teammates'],
-    // New 30 Sep 2026, not hosted yet.
-    hidden: true,
     Component: lazy(() => import('./bingo/BingoGame')),
   },
   // The seven below were added on 2 Oct 2026 from the user's roadmaps, hidden
-  // until they say otherwise. They open on `LevelSetup`, with the pools in
-  // `games/shared/levels.ts`.
+  // until 24 Nov 2026, when every game was opened as it was. They open on
+  // `LevelSetup`, with the pools in `games/shared/levels.ts`.
   {
     id: 'curveball',
     slug: 'curveball',
@@ -650,7 +637,6 @@ export const GAMES: GameMeta[] = [
       },
     ],
     terms: ['earnings'],
-    hidden: true,
     Component: lazy(() => import('./curveball/CurveballGame')),
   },
   {
@@ -682,7 +668,6 @@ export const GAMES: GameMeta[] = [
       },
     ],
     terms: ['org', 'region', 'earnings'],
-    hidden: true,
     Component: lazy(() => import('./org-chart/OrgChartGame')),
   },
   {
@@ -748,7 +733,6 @@ export const GAMES: GameMeta[] = [
       },
     ],
     terms: ['fncs-title', 'fncs-final', 'global', 'lan', 'org', 'earnings'],
-    hidden: true,
     Component: lazy(() => import('./rewind/RewindGame')),
   },
   {
@@ -774,7 +758,6 @@ export const GAMES: GameMeta[] = [
       },
     ],
     terms: ['nationality', 'org', 'fncs-title', 'earnings', 'teammates', 'major'],
-    hidden: true,
     Component: lazy(() => import('./irl/IrlGame')),
   },
   {
@@ -806,7 +789,6 @@ export const GAMES: GameMeta[] = [
       },
     ],
     terms: ['org', 'fncs-title', 'earnings'],
-    hidden: true,
     Component: lazy(() => import('./transfer-window/TransferWindowGame')),
   },
   {
@@ -831,7 +813,6 @@ export const GAMES: GameMeta[] = [
       },
     ],
     terms: ['major', 'lan', 'global'],
-    hidden: true,
     Component: lazy(() => import('./which-lobby/WhichLobbyGame')),
   },
 ];

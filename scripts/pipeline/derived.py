@@ -489,8 +489,23 @@ def build(BASE):
     # last stage - counts as a miss. Before 2022 the formats changed inside a
     # year, and a trio's 12th of 33 and a solo 40th of 100 average as written
     # (the user's call).
-    MISSED = {'Solo': 200, 'Duo': 100, 'Trio': 66, 'Squad': 50}
-    MODE_WORD = {'Solo': 'solos', 'Duo': 'duos', 'Trio': 'trios', 'Squad': 'squads'}
+    #
+    # The Reload FNCS (2026's second Solo FNCS, 21-22 Nov) is solos in lobbies
+    # of 40, so a missed one is 80th, not a 100-player solo final's 200th (the
+    # user, 24 Nov 2026: "200 for br and 80 for reload"). It is a format of its
+    # own for the miss and the tie rule, and a solo round for everything else:
+    # which rounds a year's boards split off, and their ids (`FAMILY`).
+    MISSED = {'Solo': 200, 'Duo': 100, 'Trio': 66, 'Squad': 50, 'Reload': 80}
+    MODE_WORD = {'Solo': 'solos', 'Duo': 'duos', 'Trio': 'trios', 'Squad': 'squads', 'Reload': 'Reload'}
+    FAMILY = {'Reload': 'Solo'}
+    family = lambda m: FAMILY.get(m, m)
+
+    def round_format(events):
+        """A round's format: the mode its finals share, 'Reload' for a solo
+        round of Reload finals, None for a round of mixed modes."""
+        modes = {tour_of[n].get('mode') for n in events}
+        mode = modes.pop() if len(modes) == 1 else None
+        return 'Reload' if mode == 'Solo' and all('Reload' in n for n in events) else mode
     TEAM_SIZE = {'Duo': 2, 'Trio': 3}
     SERVERS = ['Europe', 'NA East', 'NA Central', 'NA West', 'Brazil', 'Asia',
                'Middle East', 'Oceania']
@@ -506,9 +521,10 @@ def build(BASE):
             return 'Brazil'          # what the FNCS calls it
         if reg != 'North America':
             return reg
-        if re.search(r'NA East|North America East', t['name']):
+        # The 2026 Reload FNCS shortened them: "FNCS 2026 Reload: NAW" (and NAC, EU).
+        if re.search(r'NA East|North America East|\bNAE\b', t['name']):
             return 'NA East'
-        if re.search(r'NA West|North America West', t['name']):
+        if re.search(r'NA West|North America West|\bNAW\b', t['name']):
             return 'NA West'
         return 'NA Central'
 
@@ -534,9 +550,23 @@ def build(BASE):
         if r is not None and names and all(names):
             finishes[n].append((r, tuple(sorted(entrant(x) for x in names))))
 
-    # (year, mode, {server: [finals]}) for each round with results, oldest
-    # first. A round still to be played is not one anybody missed.
-    ROUNDS = []
+    # Results still coming in. Liquipedia lists a final's places before it
+    # names who took them: on 24 Nov 2026 the Reload's Brazil final had its 40
+    # places and no names, and NA West named only its 21st to 40th. A final
+    # with a place nobody is named on yet is pending. Its region's boards leave
+    # the round out and the world's wait for it, rather than count the players
+    # not named yet as having missed it. Nothing before the Reload is pending.
+    unnamed_places = Counter()
+    for row in placements:
+        n = row.get('tournament')
+        if n in AVERAGED and not did_not_play(row) and rank_of(row.get('placement')) is not None:
+            if not all(p.get('player') for p in (row.get('participants') or [{}])):
+                unnamed_places[n] += 1
+
+    # (year, format, {server: [finals]}) for each round with results, oldest
+    # first, and ROUND_PENDING[i], the regions of round i still being filled
+    # in. A round still to be played is not one anybody missed.
+    ROUNDS, ROUND_PENDING = [], []
     for wave in WAVES:
         played = [n for _, n in wave if finishes[n]]
         if not played:
@@ -544,9 +574,13 @@ def build(BASE):
         servers = defaultdict(list)
         for n in played:
             servers[fncs_server(tour_of[n])].append(n)
-        modes = {tour_of[n].get('mode') for n in played}
-        ROUNDS.append((year_of(tour_of[played[0]]), modes.pop() if len(modes) == 1 else None,
-                       dict(servers)))
+        ROUNDS.append((year_of(tour_of[played[0]]), round_format(played), dict(servers)))
+        ROUND_PENDING.append({fncs_server(tour_of[n]) for _, n in wave if unnamed_places[n]})
+    for (y, m, _), pending in zip(ROUNDS, ROUND_PENDING):
+        if pending:
+            print(f'  averages: the {y} {m} round is still being filled in for {sorted(pending)} - '
+                  'left out of those regions and of the world until it is')
+    waiting = lambda pending, server: bool(pending) and (not server or server in pending)
     YEAR_LANS = defaultdict(list)
     for n in sorted(LANS, key=lambda n: (day_of(tour_of[n]) or '', n)):
         if finishes[n]:
@@ -656,11 +690,11 @@ def build(BASE):
         on it, and how many rounds of FNCS finals are among the slots. Rounds
         played in a format in `skip` are left out."""
         slots = []
-        for y, m, by_server in ROUNDS:
-            if year is not None and y != year:
+        for (y, m, by_server), pending in zip(ROUNDS, ROUND_PENDING):
+            if (year is not None and y != year) or waiting(pending, server):
                 continue
             events = by_server.get(server, []) if server else [n for ns in by_server.values() for n in ns]
-            if events and (mode is None or m == mode) and m not in skip:
+            if events and (mode is None or m == mode) and family(m) not in skip:
                 slots.append((m, events))
         k = len(slots)
         home = {n for _, events in slots for n in events}
@@ -681,7 +715,9 @@ def build(BASE):
         # without that round, so a player who never tried to qualify for it is
         # not counted as missing it, and again with it, a missed final at its
         # own format's miss. The team boards never had it: a solo final has no duos.
-        odd = tuple(sorted(m for m in round_modes if team_mode and m and m != team_mode))
+        # By family: the Solos BR and the Reload are both the Solo FNCS, one split
+        # on the ids it has always had (`with-solos`).
+        odd = tuple(sorted({family(m) for m in round_modes if team_mode and m and family(m) != team_mode}))
         odd_name = ' and the '.join(f'{m} FNCS' for m in odd)
         for prefix, lans in (('season', YEAR_LANS[year]), ('fncs-avg', [])):
             if prefix == 'season' and not lans:
@@ -712,6 +748,90 @@ def build(BASE):
                                   avg_tie(slots, lans, k, server, f'of {year}', size),
                                   average_finish(slots, home, size, peak=peak), size, peak)
                         avg_built[prefix] += len(boards) - before
+
+    # ------------------------------------------ the year's Solo FNCS together --
+    # A year of team Majors with two or more Solo FNCS - 2026's Solos BR (26-27
+    # Oct) and Reload (21-22 Nov) - gets boards of their own (the user, 24 Nov
+    # 2026: "top 10 best players combined in this fncs (global and region) ...
+    # 200 for br and 80 for reload"): the average finish over those rounds
+    # alone, each player in their own region's final, a missed one at its own
+    # miss; and the prize money won at them, level sums going to that average.
+    # A region's boards wait for both its finals to be named and the world's
+    # for every region's (`waiting`), so they come by themselves with the data.
+    # List's "made both finals" is built from the same rounds, below.
+    SOLO_WORD = {'Solo': 'BR', 'Reload': 'Reload'}
+    MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+              'September', 'October', 'November', 'December']
+    SOLO_ROUNDS = defaultdict(list)          # year -> [(format, {server: [finals]}, pending)]
+    for (y, m, by_server), pending in zip(ROUNDS, ROUND_PENDING):
+        if family(m) == 'Solo':
+            SOLO_ROUNDS[y].append((m, by_server, pending))
+
+    def team_format(year):
+        formats = Counter(m for y, m, _ in ROUNDS if y == year)
+        return formats.most_common(1)[0][0] if year >= 2022 and formats else None
+
+    SOLO_YEARS = [y for y, solo in sorted(SOLO_ROUNDS.items())
+                  if len(solo) >= 2 and team_format(y) and family(team_format(y)) != 'Solo']
+
+    def solo_rounds_text(solo):
+        """'BR (October) and Reload (November)'"""
+        first = lambda by_server: min(day_of(tour_of[n]) for ns in by_server.values() for n in ns)
+        return join([f'{SOLO_WORD.get(m, m)} ({MONTHS[int(first(bs)[5:7]) - 1]})' for m, bs, _ in solo])
+
+    solo_events = {n for y in SOLO_YEARS for _, bs, _ in SOLO_ROUNDS[y] for ns in bs.values() for n in ns}
+    solo_prize = defaultdict(Counter)        # final -> entrant -> prize money
+    for row in placements:
+        n = row.get('tournament')
+        if n in solo_events and not did_not_play(row):
+            won = float(row.get('individualprizemoney') or 0)
+            for p in row.get('participants') or []:
+                if p.get('player'):
+                    solo_prize[n][entrant(p['player'])] += won
+
+    solo_built = Counter()
+    for year in SOLO_YEARS:
+        solo = SOLO_ROUNDS[year]
+        group = f'{year} season'
+        rounds_text = solo_rounds_text(solo)
+        miss_text = join([f'{MISSED[m]}th in {SOLO_WORD.get(m, m)}' for m, _, _ in solo])
+        for server in [None] + SERVERS:
+            if any(waiting(pending, server) for _, _, pending in solo):
+                continue
+            slots = [(m, by_server.get(server, []) if server else [n for ns in by_server.values() for n in ns])
+                     for m, by_server, _ in solo]
+            if not all(events for _, events in slots):
+                continue                    # a region without both finals
+            home = {n for _, events in slots for n in events}
+            where = f' — {server}' if server else ''
+            whose = (f'the {server} grand finals' if server else
+                     "the grand finals, each player in their own region's final,")
+            peak = {}
+            avgs = average_finish(slots, home, peak=peak)
+            before = len(boards)
+            avg_board(f"solo-fncs:{year}:{server or 'world'}", group,
+                      f'Top 10 by average finish across both {year} Solo FNCS{where}',
+                      f"Average finish at {whose} of the {year} Solo FNCS: {rounds_text}. A missed final "
+                      f"counts as twice a full lobby's last place: {miss_text}.",
+                      avgs, peak=peak)
+            # The money: every row of those finals, named or not, so a top-11
+            # earner with no page refuses the board rather than let 11th pass for 10th.
+            bid = f"solo-fncs-money:{year}:{server or 'world'}"
+            prize = Counter()
+            for n in home:
+                prize.update(solo_prize[n])
+            ranked = sorted(((k, NAME(k), v, -avgs.get(k, 999), career.get(k, 0)) for k, v in prize.items() if v > 0),
+                            key=lambda e: (-e[2], -e[3], -e[4], e[1].lower()))
+            if any(unnamed(e[0]) for e in ranked[:SLOTS + 1]):
+                AVG_UNNAMED.append(bid)
+            else:
+                board(bid, group, f'Top 10 earners across both {year} Solo FNCS{where}', 'player',
+                      f'Prize money won at {whose} of the {year} Solo FNCS, added together: {rounds_text}. '
+                      f'Level sums go to the better average finish over the same finals (a missed one at '
+                      f'{miss_text}), then to the bigger career earner.',
+                      ranked, money)
+            solo_built[server or 'world'] += len(boards) - before
+    print(f'Solo FNCS together: {SOLO_YEARS or "no year"}; boards {dict(solo_built)}')
 
     # All time: every round of FNCS finals, misses counted from 2019 for
     # everyone - nobody knows when a player started trying to qualify.
@@ -1030,8 +1150,9 @@ def build(BASE):
     # "Most of them" of two is one, for a player who split them.
     most_in = lambda n, server: f'at least one in {server}' if n == 2 else f'most of them in {server}'
 
-    def every_by_region(lid, title, subtitle, rounds):
-        """`rounds` is [{region: everyone there}], one per round."""
+    def every_by_region(lid, title, subtitle, rounds, hold=()):
+        """`rounds` is [{region: everyone there}], one per round. A region in
+        `hold` is still being filled in on Liquipedia and gets no list yet."""
         everyone = set.intersection(*(set().union(*r.values()) for r in rounds))
         played = defaultdict(Counter)
         for r in rounds:
@@ -1045,7 +1166,7 @@ def build(BASE):
                 if n == most:
                     listed[server].add(k)
         for server in SERVERS:
-            if listed[server]:
+            if listed[server] and server not in hold:
                 add_list(f'{lid}:{server}', f'{title} — {server}', subtitle(server), listed[server])
 
     for season in _seasons:
@@ -1074,8 +1195,27 @@ def build(BASE):
                      set.intersection(*(set().union(*r.values()) for r in rounds))
                      & set().union(*(fncs_there[n] for n in cup)))
             continue
+        held = set().union(*(pending for (y, _m, _bs), pending in zip(ROUNDS, ROUND_PENDING) if y == year))
         every_by_region(f'fncs-every:{year}', f'Players who played every FNCS grand final of {year}',
-                        lambda server: f"{every_n(len(rounds), 'rounds')}, {most_in(len(rounds), server)}", rounds)
+                        lambda server: f"{every_n(len(rounds), 'rounds')}, {most_in(len(rounds), server)}", rounds,
+                        hold=held)
+
+    # Both of a year's Solo FNCS finals (the user, 24 Nov 2026: "every player to
+    # qualify both solos (every region and world)"): the world, and each region
+    # the way the lists above are split. A region still being filled in waits,
+    # and the world with it.
+    for year in SOLO_YEARS:
+        solo = SOLO_ROUNDS[year]
+        rounds = [{server: set().union(*(fncs_there[n] for n in finals)) for server, finals in by_server.items()}
+                  for _m, by_server, _p in solo]
+        held = set().union(*(pending for _, _, pending in solo))
+        rounds_text = solo_rounds_text(solo)
+        title = f'Players who made both {year} Solo FNCS finals'
+        if not held:
+            add_list(f'solo-fncs-both:{year}', title, f'{rounds_text}, in any region',
+                     set.intersection(*(set().union(*r.values()) for r in rounds)))
+        every_by_region(f'solo-fncs-both:{year}', title,
+                        lambda server: f'{rounds_text}, {most_in(len(rounds), server)}', rounds, hold=held)
     for server in [None] + FPE_SERVERS:
         quals = Counter()
         for p in FPE_PLAYED:
@@ -1710,7 +1850,7 @@ def build(BASE):
     # because the region is not what anyone remembers and it is never the question.
     _REGION_TAIL = re.compile(
         r'\s*[-:]\s*(NA East|NA West|NA Central|North America East|North America West|'
-        r'North America Central|North America|Europe|Asia|Brazil|Middle East|Oceania|'
+        r'North America Central|North America|NAE|NAW|NAC|Europe|EU|Asia|Brazil|Middle East|Oceania|'
         r'World|Global)\s*$', re.I)
     _FINALS = re.compile(r'\s*[-:]?\s*Grand Finals?\s*[-:]?\s*', re.I)
 
